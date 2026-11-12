@@ -1,20 +1,16 @@
 {{/* Compose an image reference using the optional global or per-image registry. */}}
 {{- define "salt-minion.image" -}}
 {{-   $image := .image -}}
-{{-   $reference := required "image repository is required" $image.repository -}}
-{{-   $reference = printf "%s:%v" $reference (required "image tag is required" $image.tag) -}}
-{{-   $registry := .global.imageRegistry | default $image.registry | default "" | trimSuffix "/" -}}
-{{-   if or (contains "://" $registry) (regexMatch "[[:space:]]" $registry) -}}
-{{-     fail "image registry must not contain a URL scheme or whitespace" -}}
-{{-   end -}}
+{{-   $registry := default $image.registry .global.imageRegistry | default "" | trimSuffix "/" -}}
+
 {{-   if $registry -}}
-{{-     printf "%s/%s" $registry $reference -}}
+{{-     printf "%s/%s:%v" $registry $image.repository $image.tag -}}
 {{-   else -}}
-{{-     $reference -}}
+{{-     printf "%s:%v" $image.repository $image.tag -}}
 {{-   end -}}
 {{- end -}}
 
-{{/* Validate key input before emitting in-cluster resources. */}}
+{{/* Validate in-cluster configuration and guard key Secret transitions. */}}
 {{- define "salt-minion.validate" -}}
 {{-   if eq .Values.agent.authMode "in_cluster" -}}
 {{-     $keys := .Values.agent.minion -}}
@@ -95,30 +91,46 @@ minion.pub
 
 {{/* Render the Job and its RBAC only when a key Secret is needed. */}}
 {{- define "salt-minion.keygenJobEnabled" -}}
-{{-   if and (eq .Values.agent.authMode "in_cluster") (not .Values.agent.minion.keySecretName) (not .Values.agent.minion.privateKeyB64) -}}
-{{-     if not (lookup "v1" "Secret" .Values.namespace (include "salt-minion.keySecretName" .)) -}}
+{{-   $agent := .Values.agent -}}
+{{-   if and
+        (eq $agent.authMode "in_cluster")
+        (not $agent.minion.keySecretName)
+        (not $agent.minion.privateKeyB64)
+        (not (lookup "v1" "Secret" .Values.namespace (include "salt-minion.keySecretName" .))) -}}
 true
-{{-     end -}}
 {{-   end -}}
 {{- end -}}
 
 {{/* Create PKI storage only when persistence needs a chart-managed PVC. */}}
 {{- define "salt-minion.pkiClaimEnabled" -}}
-{{-   if and (eq .Values.agent.authMode "in_cluster") .Values.agent.persistence.enabled (eq .Values.agent.persistence.type "pvc") (not .Values.agent.persistence.pvc.existingClaim) -}}
+{{-   $persistence := .Values.agent.persistence -}}
+{{-   if and
+        (eq .Values.agent.authMode "in_cluster")
+        $persistence.enabled
+        (eq $persistence.type "pvc")
+        (not $persistence.pvc.existingClaim) -}}
 true
 {{-   end -}}
 {{- end -}}
 
 {{/* Create data storage only when no existing claim is supplied. */}}
 {{- define "salt-minion.dataClaimEnabled" -}}
-{{-   if and (eq .Values.agent.authMode "in_cluster") .Values.agent.dataPersistence.enabled (not .Values.agent.dataPersistence.existingClaim) -}}
+{{-   $persistence := .Values.agent.dataPersistence -}}
+{{-   if and
+        (eq .Values.agent.authMode "in_cluster")
+        $persistence.enabled
+        (not $persistence.existingClaim) -}}
 true
 {{-   end -}}
 {{- end -}}
 
 {{/* Create a Secret only for an inline key pair. */}}
 {{- define "salt-minion.inlineSecretEnabled" -}}
-{{-   if and (eq .Values.agent.authMode "in_cluster") .Values.agent.minion.privateKeyB64 .Values.agent.minion.publicKeyB64 -}}
+{{-   $minion := .Values.agent.minion -}}
+{{-   if and
+        (eq .Values.agent.authMode "in_cluster")
+        $minion.privateKeyB64
+        $minion.publicKeyB64 -}}
 true
 {{-   end -}}
 {{- end -}}
