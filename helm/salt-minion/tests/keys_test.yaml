@@ -1,0 +1,37 @@
+suite: minion keys
+templates:
+  - templates/minion-secret.yaml
+  - templates/keygen-job.yaml
+tests:
+  - it: writes inline base64 values to the expected Secret entries
+    template: templates/minion-secret.yaml
+    set:
+      agent.minion.privateKeyB64: cHJpdmF0ZQ==
+      agent.minion.publicKeyB64: cHVibGlj
+    asserts:
+      - equal:
+          path: data["minion.pem"]
+          value: cHJpdmF0ZQ==
+      - equal:
+          path: data["minion.pub"]
+          value: cHVibGlj
+
+  - it: skips key generation when an existing Secret is configured
+    template: templates/keygen-job.yaml
+    set:
+      agent.minion.keySecretName: external-keys
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: uses separate configurable images for key generation and kubectl
+    template: templates/keygen-job.yaml
+    set:
+      global.imageRegistry: mirror.example
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: mirror.example/hashicorp/consul:2.1.0
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: mirror.example/rancher/k3s:v1.35.3-k3s1

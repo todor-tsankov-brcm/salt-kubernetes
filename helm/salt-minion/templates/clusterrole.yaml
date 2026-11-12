@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Values.rbac.roleName }}-nodes
+  name: {{ include "salt-minion.clusterRoleName" . }}
   labels:
     app.kubernetes.io/name: salt-minion
     app.kubernetes.io/managed-by: {{ .Release.Service }}

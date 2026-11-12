@@ -1,8 +1,8 @@
-{{- if and .Values.rbac.create (not .Values.agent.minion.keySecretName) }}
+{{- if include "salt-minion.keygenRbacEnabled" . }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ .Release.Name }}-minion-keygen-role
+  name: {{ include "salt-minion.keygenRoleName" . }}
   namespace: {{ .Values.namespace }}
 rules:
   - apiGroups: [""]

@@ -1,0 +1,12 @@
+{{- if eq .Values.agent.authMode "in_cluster" }}
+{{- range .Values.agent.extraConfigMaps }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .name | quote }}
+  namespace: {{ $.Values.namespace }}
+data:
+  {{- toYaml .data | nindent 2 }}
+{{- end }}
+{{- end }}
