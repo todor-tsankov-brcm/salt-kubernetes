@@ -6,17 +6,11 @@ global:
   imageRegistry: ""
 
 agent:
-  # Used by the automatic key-generation Job; must contain kubectl and /bin/sh.
+  # Used by the key-generation Job; must contain kubectl, openssl, and /bin/sh.
   keygenImage:
     registry: docker.io
-    repository: rancher/k3s
-    tag: v1.35.3-k3s1
-    pullPolicy: IfNotPresent
-  # Used by the Job's key-generation init container; must contain OpenSSL and /bin/sh.
-  opensslImage:
-    registry: docker.io
-    repository: hashicorp/consul
-    tag: "2.1.0"
+    repository: bitnami/kubectl
+    tag: latest
     pullPolicy: IfNotPresent
   imagePullSecrets: []
   extraVolumes: []

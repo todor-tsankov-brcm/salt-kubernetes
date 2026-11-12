@@ -24,14 +24,11 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: uses separate configurable images for key generation and kubectl
+  - it: uses the configurable keygen image
     template: templates/keygen-job.yaml
     set:
       global.imageRegistry: mirror.example
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[0].image
-          value: mirror.example/hashicorp/consul:2.1.0
-      - equal:
           path: spec.template.spec.containers[0].image
-          value: mirror.example/rancher/k3s:v1.35.3-k3s1
+          value: mirror.example/bitnami/kubectl:latest

@@ -1,8 +1,6 @@
 {{- $secretName := include "salt-minion.keySecretName" . -}}
 {{- $privateKey := include "salt-minion.privateKeyFile" . -}}
 {{- $publicKey := include "salt-minion.publicKeyFile" . -}}
-{{- $keyDir := "/var/run/salt-keygen" -}}
-{{- $keyVolume := "keygen-keys" -}}
 {{- if include "salt-minion.keygenJobEnabled" . }}
 apiVersion: batch/v1
 kind: Job
@@ -22,24 +20,6 @@ spec:
       securityContext:
         {{- toYaml .Values.agent.podSecurityContext | nindent 8 }}
       restartPolicy: OnFailure
-      initContainers:
-        - name: generate-keys
-          image: {{ include "salt-minion.image" (dict "image" .Values.agent.opensslImage "global" .Values.global) | quote }}
-          imagePullPolicy: {{ .Values.agent.opensslImage.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.agent.containerSecurityContext | nindent 12 }}
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              set -eu
-              umask 077
-              openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-                -out {{ $keyDir }}/{{ $privateKey }}
-              openssl rsa -pubout -in {{ $keyDir }}/{{ $privateKey }} \
-                -out {{ $keyDir }}/{{ $publicKey }}
-          volumeMounts:
-            - name: {{ $keyVolume }}
-              mountPath: {{ $keyDir }}
       containers:
         - name: keygen
           image: {{ include "salt-minion.image" (dict "image" .Values.agent.keygenImage "global" .Values.global) | quote }}
@@ -64,19 +44,16 @@ spec:
                 exit 0
               fi
 
+              openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+                -out "$temporary_directory/{{ $privateKey }}"
+              openssl rsa -pubout -in "$temporary_directory/{{ $privateKey }}" \
+                -out "$temporary_directory/{{ $publicKey }}"
+
               if ! kubectl create secret generic "$secret" \
                 --namespace "$namespace" \
-                --from-file={{ $privateKey }}={{ $keyDir }}/{{ $privateKey }} \
-                --from-file={{ $publicKey }}={{ $keyDir }}/{{ $publicKey }}; then
+                --from-file={{ $privateKey }}="$temporary_directory/{{ $privateKey }}" \
+                --from-file={{ $publicKey }}="$temporary_directory/{{ $publicKey }}"; then
                 # Another installer may have won the create race. Never replace it.
                 kubectl get secret "$secret" --namespace "$namespace" >/dev/null
               fi
-          volumeMounts:
-            - name: {{ $keyVolume }}
-              mountPath: {{ $keyDir }}
-              readOnly: true
-      volumes:
-        - name: {{ $keyVolume }}
-          emptyDir:
-            medium: Memory
 {{- end }}

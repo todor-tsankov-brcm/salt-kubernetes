@@ -278,7 +278,7 @@ not suitable for secrets; use a Secret volume for credentials.
 
 ### Image registries
 
-`agent.image`, `agent.keygenImage`, and `agent.opensslImage` each have `registry`, `repository`,
+`agent.image` and `agent.keygenImage` each have `registry`, `repository`,
 `tag`, and `pullPolicy` settings.
 Set `global.imageRegistry` to override all image registries, including an
 optional port and repository prefix, for example `registry.example:5000/mirror`.
@@ -328,13 +328,11 @@ cannot check existing resources.
 When no external Secret or inline pair is supplied, a Job creates the
 release-named Secret with a generated keypair if it does not already exist:
 
-The Job uses `agent.opensslImage` to generate the pair and `agent.keygenImage`
-to create the Secret. Their defaults are HashiCorp Consul and Rancher K3s images,
-respectively. Overrides must include `/bin/sh` and the corresponding `openssl`
-or `kubectl` command, and support the configured non-root user. The generated
-keys are shared through an in-memory pod volume. Select a kubectl version
-compatible with your cluster. The Job needs Kubernetes API access and permission
-to read and create Secrets; it never replaces an existing Secret.
+The Job uses `agent.keygenImage`, which defaults to `bitnami/kubectl:latest`.
+An override must include `/bin/sh`, `openssl`, and `kubectl`, and support the
+configured non-root user. Select a kubectl version compatible with your cluster.
+The Job needs Kubernetes API access and permission to read and create Secrets;
+it never replaces an existing Secret.
 
 ```bash
 helm install salt-minion ./helm/salt-minion \

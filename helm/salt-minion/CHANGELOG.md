@@ -4,7 +4,7 @@
 
 - Prepare PKI keys without root, honor PKI persistence and avoid overlapping pods on upgrades.
 - Use matching raw PEM Secret entries for inline, existing and generated keys.
-- Use separate configurable OpenSSL and kubectl images with non-root security settings.
+- Use a configurable key-generation image with non-root security settings.
 - Emit only ServiceAccount and RBAC resources in external mode.
 
 Image and chart in this directory publish under separate release tags (see
