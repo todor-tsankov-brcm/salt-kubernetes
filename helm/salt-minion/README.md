@@ -254,6 +254,43 @@ credentials:
   api_key: sdb://vault_sdb/secret/data/api:key
 ```
 
+### Additional ConfigMaps
+
+Each `agent.extraConfigMaps` entry has a `name` and `data`. Set `mountPath`
+to mount its data read-only in the minion container. With no `key`, the path
+is a directory and each data entry becomes a file. Set `key` to mount one
+entry as a file at `mountPath`, without hiding other files in its parent
+directory. For example:
+
+```yaml
+agent:
+  extraConfigMaps:
+    - name: minion-custom-config
+      mountPath: /etc/salt/minion.d/90-custom.conf
+      key: custom.conf
+      data:
+        custom.conf: |
+          file_client: remote
+```
+
+Changes to these ConfigMaps trigger a Deployment rollout. ConfigMap data is
+not suitable for secrets; use a Secret volume for credentials.
+
+### Image registries
+
+`agent.image` and `agent.keygenImage` each have `registry`, `repository`,
+`tag`, and `pullPolicy` settings.
+Set `global.imageRegistry` to override all image registries, including an
+optional port and repository prefix, for example `registry.example:5000/mirror`.
+Images and tags must already exist in the selected registry. Configure
+`agent.imagePullSecrets` for registry authentication on both workloads.
+
+The registry is optional. Keep it separate from `repository`; if both the
+global and per-image registry are empty, the repository is rendered without a
+registry prefix. When upgrading, move any registry embedded in an existing
+repository value to the corresponding `registry` field. Replace the former
+`agent.keygenImage.image` value with the structured image fields.
+
 ### Key Management
 
 #### Pre-Seeded Keys
@@ -261,14 +298,10 @@ credentials:
 For production with pre-generated keys:
 
 ```bash
-# Encode keys
-PRIVATE_KEY=$(base64 -w0 < /path/to/minion.pem)
-PUBLIC_KEY=$(base64 -w0 < /path/to/minion.pub)
-
-# Create secret
+# Create a Secret from raw PEM files.
 kubectl create secret generic my-minion-keys \
-  --from-literal=minion.pem="$PRIVATE_KEY" \
-  --from-literal=minion.pub="$PUBLIC_KEY" \
+  --from-file=minion.pem=/path/to/minion.pem \
+  --from-file=minion.pub=/path/to/minion.pub \
   -n salt
 
 # Use in Helm
@@ -276,9 +309,30 @@ helm install salt-minion ./helm/salt-minion \
   --set agent.minion.keySecretName=my-minion-keys
 ```
 
+Alternatively, supply both `agent.minion.privateKeyB64` and
+`agent.minion.publicKeyB64` as base64-encoded PEM content and leave
+`keySecretName` empty. Helm creates `<release>-keys` with the same `minion.pem`
+and `minion.pub` entries. Inline values are stored in Helm release data. Changes
+to inline keys restart the Deployment. After changing an external Secret,
+restart the Deployment to copy its new keys.
+
+To move away from inline keys, first create a separate Secret containing the
+desired pair, then set `keySecretName` to that Secret and clear both inline
+values. Do not point `keySecretName` at the Helm-managed inline Secret: Helm
+removes it when the inline values are cleared. The chart rejects that transition
+when rendering with access to the Kubernetes API. Client-only `helm template`
+cannot check existing resources.
+
 #### Auto-Generated Keys
 
-The chart's pre-install Job automatically generates keys:
+When no external Secret or inline pair is supplied, a Job creates the
+release-named Secret with a generated keypair if it does not already exist:
+
+The Job uses `agent.keygenImage`, which defaults to `bitnami/kubectl:latest`.
+An override must include `/bin/sh`, `openssl`, and `kubectl`, and support the
+configured non-root user. Select a kubectl version compatible with your cluster.
+The Job needs Kubernetes API access and permission to read and create Secrets;
+it never replaces an existing Secret.
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
@@ -399,11 +453,12 @@ kubectl logs job/salt-minion-keygen -n salt
 
 ## Validation
 
-All changes have been validated:
+Run the chart checks locally with the [helm-unittest plugin](https://github.com/helm-unittest/helm-unittest):
 
-✅ 26/26 helm validation tests passed  
-✅ Chart linting passes  
-✅ Templates render correctly  
-✅ Health checks properly configured  
-✅ Security context enforced  
-✅ Production ready
+```sh
+helm lint ./helm/salt-minion
+helm unittest ./helm/salt-minion
+```
+
+These checks render manifests locally; they do not verify image pulls, storage
+permissions, key generation, or connectivity to a live Salt master.

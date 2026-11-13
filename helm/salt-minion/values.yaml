@@ -2,41 +2,54 @@
 # Must match the namespace used in kube-bench-job.
 namespace: salt
 
+global:
+  imageRegistry: ""
+
 agent:
+  # Used by the key-generation Job; must contain kubectl, openssl, and /bin/sh.
+  keygenImage:
+    registry: docker.io
+    repository: bitnami/kubectl
+    tag: latest
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  # Set mountPath to mount a directory, and key to mount a single file.
+  extraConfigMaps: []
+  dataPersistence:
+    enabled: false
+    existingClaim: ""
+    claimName: ""
+    mountPath: ""
+    storageClassName: null
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    retain: true
   # Deployment mode:
   #   in_cluster — deploy the Salt minion as a Kubernetes Deployment (default)
   #   external   — create RBAC only; the minion runs outside the cluster
   authMode: in_cluster
 
-  # No numeric runAsUser/runAsGroup/fsGroup here on purpose - the image runs
-  # as the 'salt' system user salt-common's own postinst creates, whose
-  # numeric uid isn't a stable constant to pin. runAsNonRoot alone still
-  # gets enforced (Kubernetes checks whatever user the image resolves to).
+  # Match the bundled images. Custom images must support the configured identity
+  # and provide writable Salt configuration, cache and log directories.
   podSecurityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
     runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
 
-  # No added capabilities: when agent.persistence.enabled mounts a
-  # PVC/hostPath at /etc/salt/pki, it comes back root-owned regardless of
-  # fsGroup, and capabilities.add can't fix that either - not every
-  # container runtime populates the *ambient* capability set for a
-  # non-root container (confirmed on this project's own test cluster:
-  # CapBnd includes CHOWN/FOWNER, CapEff/CapAmb are still empty, so the
-  # capability is granted but unusable), and even setcap-based file
-  # capabilities need allowPrivilegeEscalation: true to take effect on
-  # exec. initContainers.fixPkiPerms below (runs as root, once, briefly)
-  # is the tradeoff instead: this long-running container never runs as
-  # root, ever.
+  # Applied to the minion, key preparation and key-generation containers.
   containerSecurityContext:
     allowPrivilegeEscalation: false
     runAsNonRoot: true
     capabilities:
-      drop:
-        - ALL
+      drop: [ALL]
 
-  # Only relevant when persistence.enabled mounts a volume at /etc/salt/pki.
-  # Reuses image.repository/tag itself (not e.g. busybox) so it can resolve
-  # 'salt' by name via that image's own /etc/passwd, rather than
-  # duplicating its numeric uid here.
+  # Deprecated compatibility setting: root permission repair is no longer used.
+  # Storage must be writable by the configured runtime identity or fsGroup.
   initContainers:
     fixPkiPerms:
       enabled: true
@@ -48,7 +61,8 @@ agent:
     # with saltext.vault and saltext.kubernetes on top of core Salt. Point
     # this at a plain saltstack/salt image instead if you don't need either
     # extension.
-    repository: ghcr.io/saltstack/salt-kubernetes/salt-minion
+    registry: ghcr.io
+    repository: saltstack/salt-kubernetes/salt-minion
     # To use VCF extensions, set repository to the VCF image (e.g., salt-minion-vcf) and appropriate tag
     # repository: ghcr.io/saltstack/salt-kubernetes/salt-minion-vcf
     tag: "0.1.0"
@@ -97,6 +111,9 @@ agent:
   reconRandomize: true
 
   minion:
+    # Salt PKI directory inside the minion container. A custom path requires
+    # an image whose entrypoint honors SALT_PKI_DIR and sets Salt's pki_dir.
+    pkiDir: /etc/salt/pki/minion
     # Salt minion ID. Leave empty to use the pod hostname.
     id: ""
     masterId: ""
@@ -106,26 +123,14 @@ agent:
     privateKeyB64: ""
     publicKeyB64: ""
 
-    # Name of an EXISTING Kubernetes Secret (created out-of-band, never via
-    # Helm values) with keys 'private-key-b64' and 'public-key-b64' - a
-    # base64-encoded PEM RSA keypair for the minion itself. REQUIRED (the
-    # chart fails fast otherwise - see allowSelfGeneratedKey below for the
-    # escape hatch): the minion's public key must already be registered as
-    # trusted (e.g. via salt-key-operator's SaltMinionKey - see
-    # ../../salt-key-operator) *before* the minion starts, so it must be
-    # handed that exact keypair rather than generating its own, which the
-    # trust store would never have been told about. With
-    # agent.persistence.enabled=false (the default), a self-generated key
-    # also wouldn't even survive a pod restart.
+    # Existing Secret containing raw PEM entries minion.pem and minion.pub.
+    # When set, do not also supply privateKeyB64/publicKeyB64.
+    # Otherwise supply both inline base64 PEM values, or let the keygen Job
+    # create a release-named Secret. Prefer an out-of-band Secret in production.
     keySecretName: ""
 
-    # Explicit opt-out of the keySecretName requirement above - falls back
-    # to the minion generating its own keypair on first start. Only makes
-    # sense combined with agent.persistence.enabled=true (otherwise a fresh
-    # keypair, and a fresh unaccepted minion, appears on every pod
-    # restart). Named explicitly rather than just leaving keySecretName
-    # empty, so choosing this legacy behavior is a deliberate, visible
-    # decision in your values file.
+    # Deprecated compatibility value. Automatic Job-based generation remains
+    # enabled when no keys are supplied, regardless of this value.
     allowSelfGeneratedKey: false
 
   # Optional Vault integration (saltext.vault, baked into this chart's
@@ -143,12 +148,10 @@ agent:
     tokenFile: ""
     sdbProfile: vault_sdb
 
-  # Persists the minion's generated keypair (/etc/salt/pki) across pod
-  # restarts. Without this, a fresh keypair is generated every time the
-  # pod restarts (the directory only exists in the container's writable
-  # layer), and the salt-master rejects it as a mismatch against whatever
-  # key it already has on file for this same minion ID -- requiring a
-  # manual `salt-key -d`/`-a` cycle every time.
+  # Persist the writable PKI directory in addition to the source key Secret.
+  # Disabled uses emptyDir, re-seeded from the same Secret on each pod start.
+  # Existing hostPath/PVC ownership must allow the runtime user to create and
+  # own a private minion subdirectory. No root chown repair is performed.
   persistence:
     enabled: false
     # "pvc" (default; use when the cluster has a StorageClass, e.g. real

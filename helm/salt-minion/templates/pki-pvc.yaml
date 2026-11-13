@@ -1,0 +1,16 @@
+{{- if include "salt-minion.pkiClaimEnabled" . }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "salt-minion.pkiClaimName" . | quote }}
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes:
+    - {{ .Values.agent.persistence.pvc.accessMode | quote }}
+  {{- with .Values.agent.persistence.pvc.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.agent.persistence.pvc.size | quote }}
+{{- end }}

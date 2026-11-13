@@ -1,0 +1,36 @@
+suite: minion storage
+templates:
+  - templates/pki-pvc.yaml
+  - templates/data-pvc.yaml
+tests:
+  - it: creates a PKI claim when persistence is enabled
+    template: templates/pki-pvc.yaml
+    set:
+      agent.persistence.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-pki
+
+  - it: does not create a PKI claim when an existing claim is supplied
+    template: templates/pki-pvc.yaml
+    set:
+      agent.persistence.enabled: true
+      agent.persistence.pvc.existingClaim: old-pki
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: creates a retained data claim
+    template: templates/data-pvc.yaml
+    set:
+      agent.dataPersistence.enabled: true
+      agent.dataPersistence.claimName: snapshots
+      agent.dataPersistence.mountPath: /snapshots
+    asserts:
+      - equal:
+          path: metadata.name
+          value: snapshots
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep

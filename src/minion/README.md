@@ -167,6 +167,7 @@ The entrypoint translates these variables into minion configuration or uses them
 | `SALT_MINION_ID` | Sets minion ID. Pod hostname used if not supplied. |
 | `SALT_MASTER_FINGER` | Sets master fingerprint for trust verification (legacy - use SALT_MASTER_PUBKEY_B64 instead). |
 | `SALT_MASTER_PUBKEY_B64` | Base64-encoded master public key for direct trust without fingerprint. |
+| `SALT_PKI_DIR` | Salt PKI directory; defaults to `/etc/salt/pki/minion`. The entrypoint sets `pki_dir` and places the minion and master keys there. |
 | `SALT_MINION_PRIVATE_KEY_B64` | Base64-encoded minion private key (pre-seeded keypair). |
 | `SALT_MINION_PUBLIC_KEY_B64` | Base64-encoded minion public key (pre-seeded keypair). |
 | `SALT_LOG_LEVEL` | Sets minion log level. Default: `info`. |

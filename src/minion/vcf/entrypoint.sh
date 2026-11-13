@@ -4,20 +4,21 @@ set -eu
 CONFIG_DIR=/etc/salt/minion.d
 MASTER_CONFIG="${CONFIG_DIR}/10-master.conf"
 RUNTIME_CONFIG="${CONFIG_DIR}/20-runtime.conf"
+PKI_DIR="${SALT_PKI_DIR:-/etc/salt/pki/minion}"
 
-mkdir -p "$CONFIG_DIR" /etc/salt/pki/minion /var/cache/salt/minion/.socks /var/log/salt
+mkdir -p "$CONFIG_DIR" "$PKI_DIR" /var/cache/salt/minion/.socks /var/log/salt
 
 # Pre-seed the minion's own RSA keypair when supplied - same pattern as
 # salt-minion-vcf/scripts/docker-entrypoint.sh. Only applied when
 # minion.pem doesn't already exist, so a restarted/rescheduled container
 # (persistent PKI volume) keeps its established identity rather than
 # re-seeding on every start.
-if [ ! -s /etc/salt/pki/minion/minion.pem ] \
+if [ ! -s "${PKI_DIR}/minion.pem" ] \
     && [ -n "${SALT_MINION_PRIVATE_KEY_B64:-}" ] && [ -n "${SALT_MINION_PUBLIC_KEY_B64:-}" ]; then
-  echo "${SALT_MINION_PRIVATE_KEY_B64}" | base64 -d > /etc/salt/pki/minion/minion.pem
-  chmod 0400 /etc/salt/pki/minion/minion.pem
-  echo "${SALT_MINION_PUBLIC_KEY_B64}" | base64 -d > /etc/salt/pki/minion/minion.pub
-  chmod 0644 /etc/salt/pki/minion/minion.pub
+  echo "${SALT_MINION_PRIVATE_KEY_B64}" | base64 -d > "${PKI_DIR}/minion.pem"
+  chmod 0400 "${PKI_DIR}/minion.pem"
+  echo "${SALT_MINION_PUBLIC_KEY_B64}" | base64 -d > "${PKI_DIR}/minion.pub"
+  chmod 0644 "${PKI_DIR}/minion.pub"
   echo "Pre-seeded minion keypair (already registered as trusted)"
 fi
 
@@ -81,7 +82,7 @@ EOF
   # live. SALT_MASTER_PUBKEY_B64 takes precedence over the legacy
   # SALT_MASTER_FINGER when both are set.
   if [ -n "${SALT_MASTER_PUBKEY_B64:-}" ]; then
-    echo "${SALT_MASTER_PUBKEY_B64}" | base64 -d > /etc/salt/pki/minion/minion_master.pub
+    echo "${SALT_MASTER_PUBKEY_B64}" | base64 -d > "${PKI_DIR}/minion_master.pub"
   elif [ -n "${SALT_MASTER_FINGER:-}" ]; then
     cat >> "$MASTER_CONFIG" <<EOF
 master_finger: '${SALT_MASTER_FINGER}'
@@ -114,6 +115,7 @@ fi
 # disconnected enough to need one.
 cat > "$RUNTIME_CONFIG" <<EOF
 id: ${SALT_MINION_ID}
+pki_dir: "${PKI_DIR}"
 log_level: ${SALT_LOG_LEVEL:-info}
 
 # Route Salt's log file to stdout so 'kubectl logs' captures minion activity

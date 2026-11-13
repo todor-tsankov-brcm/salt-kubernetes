@@ -1,3 +1,4 @@
+{{- if eq .Values.agent.authMode "in_cluster" }}
 {{- $configName := printf "%s-minion-config" .Release.Name }}
 apiVersion: v1
 kind: ConfigMap
@@ -8,3 +9,5 @@ data:
   minion_id: {{ .Values.agent.minion.id | default (printf "%s-%s" .Release.Name .Release.Namespace) | quote }}
   master_id: {{ .Values.agent.minion.masterId | quote }}
   master_pub_key_b64: {{ .Values.agent.minion.masterPubKeyB64 | quote }}
+
+{{- end }}

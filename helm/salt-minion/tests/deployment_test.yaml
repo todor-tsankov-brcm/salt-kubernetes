@@ -1,0 +1,33 @@
+suite: minion deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: mounts keys using the configured PKI directory
+    set:
+      agent.minion.keySecretName: existing-keys
+      agent.minion.pkiDir: /custom/pki
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /custom/pki
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].subPath
+          value: minion
+      - equal:
+          path: spec.template.spec.volumes[0].secret.secretName
+          value: existing-keys
+
+  - it: applies the global registry to the minion image
+    set:
+      global.imageRegistry: registry.example/mirror
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example/mirror/saltstack/salt-kubernetes/salt-minion:0.1.0
+
+  - it: does not deploy a minion in external mode
+    set:
+      agent.authMode: external
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -1,0 +1,20 @@
+{{- $data := .Values.agent.dataPersistence }}
+{{- if include "salt-minion.dataClaimEnabled" . }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "salt-minion.dataClaimName" . | quote }}
+  namespace: {{ .Values.namespace }}
+  {{- if $data.retain }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes: [{{ $data.accessMode | quote }}]
+  {{- if ne $data.storageClassName nil }}
+  storageClassName: {{ $data.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $data.size | quote }}
+{{- end }}

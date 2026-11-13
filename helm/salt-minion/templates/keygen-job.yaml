@@ -1,6 +1,7 @@
-{{- $secretName := .Values.agent.minion.keySecretName | default (printf "%s-keys" .Release.Name) -}}
-{{- $existingSecret := lookup "v1" "Secret" .Values.namespace $secretName -}}
-{{- if and (not .Values.agent.minion.keySecretName) (not $existingSecret) }}
+{{- $secretName := include "salt-minion.keySecretName" . -}}
+{{- $privateKey := include "salt-minion.privateKeyFile" . -}}
+{{- $publicKey := include "salt-minion.publicKeyFile" . -}}
+{{- if include "salt-minion.keygenJobEnabled" . }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -11,39 +12,48 @@ spec:
   template:
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- with .Values.agent.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       automountServiceAccountToken: true
+      securityContext:
+        {{- toYaml .Values.agent.podSecurityContext | nindent 8 }}
       restartPolicy: OnFailure
       containers:
         - name: keygen
-          image: bitnami/kubectl:latest
+          image: {{ include "salt-minion.keygenImage" . | quote }}
+          imagePullPolicy: {{ .Values.agent.keygenImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.agent.containerSecurityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |
               set -eu
+              umask 077
 
               secret={{ $secretName | quote }}
               namespace={{ .Values.namespace | quote }}
 
+              temporary_directory="$(mktemp -d)"
+              trap 'rm -rf "$temporary_directory"' EXIT
+              export KUBECACHEDIR="$temporary_directory/kube-cache"
+
               if kubectl get secret "$secret" -n "$namespace" >/dev/null 2>&1; then
-                echo "Secret $secret already exists; skipping generation"
+                echo "Secret $secret already exists; keeping existing keys"
                 exit 0
               fi
 
-              temporary_directory="$(mktemp -d)"
-              trap 'rm -rf "$temporary_directory"' EXIT
+              openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+                -out "$temporary_directory/{{ $privateKey }}"
+              openssl rsa -pubout -in "$temporary_directory/{{ $privateKey }}" \
+                -out "$temporary_directory/{{ $publicKey }}"
 
-              openssl genpkey \
-                -algorithm RSA \
-                -pkeyopt rsa_keygen_bits:2048 \
-                -out "$temporary_directory/minion.pem"
-
-              openssl rsa \
-                -pubout \
-                -in "$temporary_directory/minion.pem" \
-                -out "$temporary_directory/minion.pub"
-
-              kubectl create secret generic "$secret" \
+              if ! kubectl create secret generic "$secret" \
                 --namespace "$namespace" \
-                --from-file=minion.pem="$temporary_directory/minion.pem" \
-                --from-file=minion.pub="$temporary_directory/minion.pub"
+                --from-file={{ $privateKey }}="$temporary_directory/{{ $privateKey }}" \
+                --from-file={{ $publicKey }}="$temporary_directory/{{ $publicKey }}"; then
+                # Another installer may have won the create race. Never replace it.
+                kubectl get secret "$secret" --namespace "$namespace" >/dev/null
+              fi
 {{- end }}
