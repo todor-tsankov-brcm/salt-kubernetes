@@ -1,0 +1,42 @@
+suite: minion keys
+templates:
+  - templates/deployment.yaml
+  - templates/keygen-job.yaml
+  - templates/minion-secret.yaml
+tests:
+  - it: prepares keys without root and uses group readable source
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 10001
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.volumes[0].secret.defaultMode
+          value: 288
+  - it: preserves inline secret format
+    template: templates/minion-secret.yaml
+    set:
+      agent.minion.privateKeyB64: cHJpdmF0ZQ==
+      agent.minion.publicKeyB64: cHVibGlj
+    asserts:
+      - equal:
+          path: data.private-key-b64
+          value: Y0hKcGRtRjBaUT09
+  - it: does not generate keys when inline keys are supplied
+    template: templates/keygen-job.yaml
+    set:
+      agent.minion.privateKeyB64: cHJpdmF0ZQ==
+      agent.minion.publicKeyB64: cHVibGlj
+    asserts:
+      - hasDocuments:
+          count: 0
+  - it: does not generate keys for external mode
+    template: templates/keygen-job.yaml
+    set:
+      agent.authMode: external
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -407,3 +407,5 @@ All changes have been validated:
 ✅ Health checks properly configured  
 ✅ Security context enforced  
 ✅ Production ready
+
+The minion key preparation init container runs as the image user. The pod fsGroup grants access to the key Secret and writable PKI volume. Existing Secrets may contain raw `minion.pem` and `minion.pub` or the chart inline keys `private-key-b64` and `public-key-b64`.

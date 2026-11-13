@@ -41,34 +41,28 @@ spec:
             - |
               set -eu
 
-              cp /var/run/salt-minion-keys/minion.pem \
-                 /etc/salt/pki/minion/minion.pem
-
-              cp /var/run/salt-minion-keys/minion.pub \
-                 /etc/salt/pki/minion/minion.pub
-
-              chown -R 10001:10001 /etc/salt/pki/minion
-              chmod 0700 /etc/salt/pki/minion
-              chmod 0400 /etc/salt/pki/minion/minion.pem
-              chmod 0644 /etc/salt/pki/minion/minion.pub
+              umask 077
+              mkdir -p /pki/minion
+              chmod 0700 /pki/minion
+              if [ -f /var/run/salt-minion-keys/minion.pem ]; then
+                cp /var/run/salt-minion-keys/minion.pem /pki/minion/minion.pem
+                cp /var/run/salt-minion-keys/minion.pub /pki/minion/minion.pub
+              else
+                base64 -d /var/run/salt-minion-keys/private-key-b64 > /pki/minion/minion.pem
+                base64 -d /var/run/salt-minion-keys/public-key-b64 > /pki/minion/minion.pub
+              fi
+              test -s /pki/minion/minion.pem
+              test -s /pki/minion/minion.pub
+              chmod 0400 /pki/minion/minion.pem
+              chmod 0644 /pki/minion/minion.pub
           volumeMounts:
             - name: minion-keys-source
               mountPath: /var/run/salt-minion-keys
               readOnly: true
             - name: minion-pki
-              mountPath: /etc/salt/pki/minion
+              mountPath: /pki
           securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-            runAsNonRoot: false
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - FOWNER
-                - DAC_OVERRIDE
+            {{- toYaml .Values.agent.containerSecurityContext | nindent 12 }}
 
       containers:
         - name: salt-minion
@@ -143,6 +137,7 @@ spec:
           volumeMounts:
             - name: minion-pki
               mountPath: /etc/salt/pki/minion
+              subPath: minion
 
           livenessProbe:
             exec:
@@ -173,6 +168,7 @@ spec:
         - name: minion-keys-source
           secret:
             secretName: {{ $keySecret }}
+            defaultMode: 0440
 
         - name: minion-pki
           emptyDir: {}

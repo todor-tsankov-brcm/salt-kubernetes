@@ -10,9 +10,10 @@ agent:
 
   # No numeric runAsUser/runAsGroup/fsGroup here on purpose - the image runs
   # as the 'salt' system user salt-common's own postinst creates, whose
-  # numeric uid isn't a stable constant to pin. runAsNonRoot alone still
-  # gets enforced (Kubernetes checks whatever user the image resolves to).
+  # numeric uid isn't a stable constant to pin. fsGroup provides access to
+  # the key Secret and the writable PKI volume for either bundled image.
   podSecurityContext:
+    fsGroup: 10001
     runAsNonRoot: true
 
   # No added capabilities: when agent.persistence.enabled mounts a
