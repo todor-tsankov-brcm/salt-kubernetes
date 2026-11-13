@@ -1,6 +1,7 @@
 {{- include "salt-minion.validate" . }}
 {{- if eq .Values.agent.authMode "in_cluster" }}
 {{- $keySecret := include "salt-minion.keySecretName" . }}
+{{- $agentImage := include "salt-minion.agentImage" . }}
 {{- $keyVolume := "minion-keys-source" }}
 {{- $keyMountPath := "/var/run/salt-minion-keys" }}
 {{- $pkiVolume := "minion-pki" }}
@@ -53,7 +54,7 @@ spec:
 
       initContainers:
         - name: prepare-minion-keys
-          image: {{ include "salt-minion.image" (dict "image" .Values.agent.image "global" .Values.global) | quote }}
+          image: {{ $agentImage | quote }}
           imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
           env:
             - name: SALT_PKI_DIR
@@ -85,7 +86,7 @@ spec:
             {{- toYaml .Values.agent.containerSecurityContext | nindent 12 }}
         {{- if .Values.agent.dataPersistence.enabled }}
         - name: validate-data-store
-          image: {{ include "salt-minion.image" (dict "image" .Values.agent.image "global" .Values.global) | quote }}
+          image: {{ $agentImage | quote }}
           imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
           command: ["/bin/sh", "-ec", "test -w /data || { echo 'Data volume is not writable; check storage ownership and fsGroup' >&2; exit 1; }"]
           securityContext:
@@ -97,7 +98,7 @@ spec:
 
       containers:
         - name: salt-minion
-          image: {{ include "salt-minion.image" (dict "image" .Values.agent.image "global" .Values.global) | quote }}
+          image: {{ $agentImage | quote }}
           imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
           env:
             - name: SALT_PKI_DIR

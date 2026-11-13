@@ -10,6 +10,16 @@
 {{-   end -}}
 {{- end -}}
 
+{{/* Resolve the minion image from chart values. */}}
+{{- define "salt-minion.agentImage" -}}
+{{-   include "salt-minion.image" (dict "image" .Values.agent.image "global" .Values.global) -}}
+{{- end -}}
+
+{{/* Resolve the key-generation image from chart values. */}}
+{{- define "salt-minion.keygenImage" -}}
+{{-   include "salt-minion.image" (dict "image" .Values.agent.keygenImage "global" .Values.global) -}}
+{{- end -}}
+
 {{/* Validate in-cluster configuration and guard key Secret transitions. */}}
 {{- define "salt-minion.validate" -}}
 {{-   if eq .Values.agent.authMode "in_cluster" -}}

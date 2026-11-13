@@ -22,7 +22,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: keygen
-          image: {{ include "salt-minion.image" (dict "image" .Values.agent.keygenImage "global" .Values.global) | quote }}
+          image: {{ include "salt-minion.keygenImage" . | quote }}
           imagePullPolicy: {{ .Values.agent.keygenImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.agent.containerSecurityContext | nindent 12 }}
