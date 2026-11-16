@@ -1,0 +1,30 @@
+suite: keygen Role
+templates:
+  - templates/minion-keygen-role.yaml
+tests:
+  - it: creates the resource when keys need generating
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: does not create the resource for an existing Secret
+    set:
+      agent.minion.keySecretName: existing-keys
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the resource for inline keys
+    set:
+      agent.minion.privateKeyB64: cHJpdmF0ZQ==
+      agent.minion.publicKeyB64: cHVibGlj
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the resource in external mode
+    set:
+      agent.authMode: external
+    asserts:
+      - hasDocuments:
+          count: 0

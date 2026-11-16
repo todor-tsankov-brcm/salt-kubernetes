@@ -5,7 +5,7 @@ Kubernetes compliance assessment support via kube-bench on-demand Jobs.
 
 Features:
 - In-cluster or external minion deployment modes
-- Automatic minion key generation via pre-install Job
+- Automatic minion key generation via Job
 - Health checks (liveness and readiness probes)
 - Vault integration for secrets management
 - Multi-master connectivity support
@@ -184,6 +184,7 @@ See [values.yaml](values.yaml) for the complete list of configuration options.
 | --- | --- | --- |
 | `namespace` | Kubernetes namespace for deployment | `salt` |
 | `agent.authMode` | `in_cluster` or `external` | `in_cluster` |
+| `agent.podSecurityContext.fsGroup` | Group with access to the key Secret and PKI volume | `10001` |
 | `agent.image.repository` | Docker image repository | `ghcr.io/saltstack/salt-kubernetes/salt-minion` |
 | `agent.image.tag` | Image tag/version | `0.1.0` |
 | `agent.image.pullPolicy` | Image pull policy | `IfNotPresent` |
@@ -256,19 +257,17 @@ credentials:
 
 ### Key Management
 
+The key preparation init container and minion use the same image and container security context. The pod `fsGroup` gives them access to the Secret and PKI volume. Existing Secrets can contain raw `minion.pem` and `minion.pub` files or base64-encoded PEM text in `private-key-b64` and `public-key-b64`. Set both inline key values together.
+
 #### Pre-Seeded Keys
 
 For production with pre-generated keys:
 
 ```bash
-# Encode keys
-PRIVATE_KEY=$(base64 -w0 < /path/to/minion.pem)
-PUBLIC_KEY=$(base64 -w0 < /path/to/minion.pub)
-
 # Create secret
 kubectl create secret generic my-minion-keys \
-  --from-literal=minion.pem="$PRIVATE_KEY" \
-  --from-literal=minion.pub="$PUBLIC_KEY" \
+  --from-file=minion.pem=/path/to/minion.pem \
+  --from-file=minion.pub=/path/to/minion.pub \
   -n salt
 
 # Use in Helm
@@ -278,7 +277,7 @@ helm install salt-minion ./helm/salt-minion \
 
 #### Auto-Generated Keys
 
-The chart's pre-install Job automatically generates keys:
+The chart's Job automatically generates keys:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
@@ -407,5 +406,3 @@ All changes have been validated:
 ✅ Health checks properly configured  
 ✅ Security context enforced  
 ✅ Production ready
-
-The minion key preparation init container runs as the image user. The pod fsGroup grants access to the key Secret and writable PKI volume. Existing Secrets may contain raw `minion.pem` and `minion.pub` or the chart inline keys `private-key-b64` and `public-key-b64`.

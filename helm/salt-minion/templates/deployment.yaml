@@ -44,17 +44,21 @@ spec:
               umask 077
               mkdir -p /pki/minion
               chmod 0700 /pki/minion
+              temporary_directory="$(mktemp -d /pki/minion/.keys.XXXXXX)"
+              trap 'rm -rf "$temporary_directory"' EXIT
               if [ -f /var/run/salt-minion-keys/minion.pem ]; then
-                cp /var/run/salt-minion-keys/minion.pem /pki/minion/minion.pem
-                cp /var/run/salt-minion-keys/minion.pub /pki/minion/minion.pub
+                cp /var/run/salt-minion-keys/minion.pem "$temporary_directory/minion.pem"
+                cp /var/run/salt-minion-keys/minion.pub "$temporary_directory/minion.pub"
               else
-                base64 -d /var/run/salt-minion-keys/private-key-b64 > /pki/minion/minion.pem
-                base64 -d /var/run/salt-minion-keys/public-key-b64 > /pki/minion/minion.pub
+                base64 -d /var/run/salt-minion-keys/private-key-b64 > "$temporary_directory/minion.pem"
+                base64 -d /var/run/salt-minion-keys/public-key-b64 > "$temporary_directory/minion.pub"
               fi
-              test -s /pki/minion/minion.pem
-              test -s /pki/minion/minion.pub
-              chmod 0400 /pki/minion/minion.pem
-              chmod 0644 /pki/minion/minion.pub
+              test -s "$temporary_directory/minion.pem"
+              test -s "$temporary_directory/minion.pub"
+              chmod 0400 "$temporary_directory/minion.pem"
+              chmod 0644 "$temporary_directory/minion.pub"
+              mv -f "$temporary_directory/minion.pem" /pki/minion/minion.pem
+              mv -f "$temporary_directory/minion.pub" /pki/minion/minion.pub
           volumeMounts:
             - name: minion-keys-source
               mountPath: /var/run/salt-minion-keys

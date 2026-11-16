@@ -1,0 +1,33 @@
+suite: minion deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: prepares keys as a non-root user with group-readable source
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 10001
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.defaultMode
+          value: 288
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.secretName
+          value: RELEASE-NAME-keys
+
+  - it: uses the requested existing Secret
+    set:
+      agent.minion.keySecretName: existing-keys
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.secretName
+          value: existing-keys
+
+  - it: does not deploy a minion in external mode
+    set:
+      agent.authMode: external
+    asserts:
+      - hasDocuments:
+          count: 0
