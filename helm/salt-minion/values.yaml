@@ -28,6 +28,7 @@ agent:
 
   # ── in_cluster mode settings ──────────────────────────────────────────────
   image:
+    imagePullSecrets: []
     # Published by this repo (see ../docs/releasing.md and CHANGELOG.md for
     # exactly which Salt/extension versions this tag carries) - preloaded
     # with saltext.vault and saltext.kubernetes on top of core Salt. Point
@@ -149,6 +150,13 @@ agent:
   # whose disk holds the persisted keypair, e.g. {kubernetes.io/hostname: k8s-cp}.
   # `kubectl get nodes` for hostnames.
   nodeSelector: {}
+
+keygen:
+  image:
+    imagePullSecrets: []
+    repository: bitnami/kubectl
+    tag: latest
+    pullPolicy: Always
 
 serviceAccount:
   name: salt-minion

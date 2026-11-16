@@ -10,11 +10,16 @@ spec:
   template:
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- with .Values.keygen.image.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       automountServiceAccountToken: true
       restartPolicy: OnFailure
       containers:
         - name: keygen
-          image: bitnami/kubectl:latest
+          image: {{ include "salt-minion.keygenImage" . | quote }}
+          imagePullPolicy: {{ .Values.keygen.image.pullPolicy }}
           command: ["/bin/sh", "-c"]
           args:
             - |

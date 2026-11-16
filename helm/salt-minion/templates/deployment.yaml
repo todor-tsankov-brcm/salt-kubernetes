@@ -23,6 +23,10 @@ spec:
         app.kubernetes.io/name: salt-minion
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- with .Values.agent.image.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 
       {{- with .Values.agent.nodeSelector }}
       nodeSelector:
@@ -34,7 +38,7 @@ spec:
 
       initContainers:
         - name: prepare-minion-keys
-          image: {{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}
+          image: {{ include "salt-minion.agentImage" . | quote }}
           imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
           command:
             - /bin/sh
@@ -71,7 +75,7 @@ spec:
 
       containers:
         - name: salt-minion
-          image: {{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}
+          image: {{ include "salt-minion.agentImage" . | quote }}
           imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
           env:
             - name: SALT_MASTER
