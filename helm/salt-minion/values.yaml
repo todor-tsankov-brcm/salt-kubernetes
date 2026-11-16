@@ -104,8 +104,12 @@ agent:
     # trust store would never have been told about.
     keySecretName: ""
 
-    # Explicit opt-in to generating a keypair when no keys are supplied.
+    # Explicit opt-out of the keySecretName requirement above when inline
+    # keys are not supplied - allows the keygen Job to create a keypair.
     # The generated public key must be accepted by the Salt master.
+    # Named explicitly rather than just leaving keySecretName empty, so
+    # choosing this behavior is a deliberate, visible decision in your
+    # values file.
     allowSelfGeneratedKey: false
 
   # Optional Vault integration (saltext.vault, baked into this chart's

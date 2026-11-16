@@ -1,3 +1,4 @@
+{{/* Validation */}}
 {{- define "salt-minion.validateInlineKeys" -}}
 {{- $minion := .Values.agent.minion -}}
 {{- if ne (empty $minion.privateKeyB64) (empty $minion.publicKeyB64) -}}
@@ -5,8 +6,38 @@
 {{- end -}}
 {{- end -}}
 
+{{- define "salt-minion.validateKeySource" -}}
+{{- $minion := .Values.agent.minion -}}
+{{- if not (or $minion.keySecretName $minion.privateKeyB64 $minion.allowSelfGeneratedKey) -}}
+{{- fail "set agent.minion.keySecretName or inline keys, or enable agent.minion.allowSelfGeneratedKey" -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Values */}}
 {{- define "salt-minion.keySecretName" -}}
 {{- .Values.agent.minion.keySecretName | default (printf "%s-keys" .Release.Name) -}}
+{{- end -}}
+
+{{/* Format an image repository and tag. */}}
+{{- define "salt-minion.image" -}}
+{{- printf "%s:%s" .repository (toString .tag) -}}
+{{- end -}}
+
+{{/* Resolve the minion image from chart values. */}}
+{{- define "salt-minion.agentImage" -}}
+{{- include "salt-minion.image" .Values.agent.image -}}
+{{- end -}}
+
+{{/* Resolve the key-generation image from chart values. */}}
+{{- define "salt-minion.keygenImage" -}}
+{{- include "salt-minion.image" .Values.keygen.image -}}
+{{- end -}}
+
+{{/* Enabled decisions */}}
+{{- define "salt-minion.inlineSecretEnabled" -}}
+{{- if .Values.agent.minion.privateKeyB64 -}}
+true
+{{- end -}}
 {{- end -}}
 
 {{- define "salt-minion.keygenEnabled" -}}
@@ -29,26 +60,4 @@ true
 {{- if and .Values.rbac.create (include "salt-minion.keygenEnabled" .) -}}
 true
 {{- end -}}
-{{- end -}}
-
-{{- define "salt-minion.validateKeySource" -}}
-{{- $minion := .Values.agent.minion -}}
-{{- if not (or $minion.keySecretName $minion.privateKeyB64 $minion.allowSelfGeneratedKey) -}}
-{{- fail "set agent.minion.keySecretName or inline keys, or enable agent.minion.allowSelfGeneratedKey" -}}
-{{- end -}}
-{{- end -}}
-
-{{/* Format an image repository and tag. */}}
-{{- define "salt-minion.image" -}}
-{{- printf "%s:%s" .repository (toString .tag) -}}
-{{- end -}}
-
-{{/* Resolve the minion image from chart values. */}}
-{{- define "salt-minion.agentImage" -}}
-{{- include "salt-minion.image" .Values.agent.image -}}
-{{- end -}}
-
-{{/* Resolve the key-generation image from chart values. */}}
-{{- define "salt-minion.keygenImage" -}}
-{{- include "salt-minion.image" .Values.keygen.image -}}
 {{- end -}}
