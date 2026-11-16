@@ -3,6 +3,8 @@ templates:
   - templates/deployment.yaml
 tests:
   - it: prepares keys as a non-root user with group-readable source
+    set:
+      agent.minion.allowSelfGeneratedKey: true
     asserts:
       - equal:
           path: spec.template.spec.securityContext.fsGroup
@@ -28,6 +30,19 @@ tests:
   - it: does not deploy a minion in external mode
     set:
       agent.authMode: external
+      agent.minion.keySecretName: existing-keys
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: rejects missing keys when generation is disabled
+    asserts:
+      - failedTemplate:
+          errorMessage: set agent.minion.keySecretName or inline keys, or enable agent.minion.allowSelfGeneratedKey
+
+  - it: rejects missing keys in external mode when generation is disabled
+    set:
+      agent.authMode: external
+    asserts:
+      - failedTemplate:
+          errorMessage: set agent.minion.keySecretName or inline keys, or enable agent.minion.allowSelfGeneratedKey

@@ -42,6 +42,7 @@ Selected via `agent.authMode`:
 - Kubernetes 1.24+
 - Helm 3+
 - Salt Master reachable from minion (required for in_cluster mode)
+- Provide `agent.minion.keySecretName` or both inline keys, or explicitly enable `agent.minion.allowSelfGeneratedKey`.
 - Persistent storage (optional, for PKI persistence)
 
 ## Quick Start
@@ -61,7 +62,8 @@ helm install salt-minion ./helm/salt-minion \
 ```bash
 # Install RBAC only
 helm install salt-minion ./helm/salt-minion \
-  --set agent.authMode=external
+  --set agent.authMode=external \
+  --set agent.minion.keySecretName=my-minion-keys
 
 # Get token for external minion's kubeconfig
 kubectl create token salt-minion -n salt
@@ -184,6 +186,7 @@ See [values.yaml](values.yaml) for the complete list of configuration options.
 | --- | --- | --- |
 | `namespace` | Kubernetes namespace for deployment | `salt` |
 | `agent.authMode` | `in_cluster` or `external` | `in_cluster` |
+| `agent.minion.allowSelfGeneratedKey` | Allow the keygen Job when no keys are supplied | `false` |
 | `agent.podSecurityContext.fsGroup` | Group with access to the key Secret and PKI volume | `10001` |
 | `agent.image.repository` | Docker image repository | `ghcr.io/saltstack/salt-kubernetes/salt-minion` |
 | `agent.image.tag` | Image tag/version | `0.1.0` |
@@ -281,7 +284,7 @@ The chart's Job automatically generates keys:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
-  --set agent.minion.keySecretName=""  # Let job create it
+  --set agent.minion.allowSelfGeneratedKey=true
 ```
 
 ### Health Checks

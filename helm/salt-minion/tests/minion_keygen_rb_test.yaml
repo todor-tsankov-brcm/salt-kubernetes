@@ -2,7 +2,9 @@ suite: keygen RoleBinding
 templates:
   - templates/minion-keygen-rb.yaml
 tests:
-  - it: creates the resource when keys need generating
+  - it: creates the resource when key generation is enabled
+    set:
+      agent.minion.allowSelfGeneratedKey: true
     asserts:
       - hasDocuments:
           count: 1
@@ -10,6 +12,7 @@ tests:
   - it: does not create the resource for an existing Secret
     set:
       agent.minion.keySecretName: existing-keys
+      agent.minion.allowSelfGeneratedKey: true
     asserts:
       - hasDocuments:
           count: 0
@@ -18,6 +21,7 @@ tests:
     set:
       agent.minion.privateKeyB64: cHJpdmF0ZQ==
       agent.minion.publicKeyB64: cHVibGlj
+      agent.minion.allowSelfGeneratedKey: true
     asserts:
       - hasDocuments:
           count: 0
@@ -25,6 +29,12 @@ tests:
   - it: does not create the resource in external mode
     set:
       agent.authMode: external
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the resource when generation is disabled
     asserts:
       - hasDocuments:
           count: 0

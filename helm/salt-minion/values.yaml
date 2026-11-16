@@ -8,23 +8,23 @@ agent:
   #   external   — create RBAC only; the minion runs outside the cluster
   authMode: in_cluster
 
-  # The image supplies the user. fsGroup provides access to the key Secret
-  # and the writable PKI volume without pinning the image's numeric UID.
+  # No numeric runAsUser/runAsGroup here on purpose - the image runs
+  # as the 'salt' system user salt-common's own postinst creates, whose
+  # numeric uid isn't a stable constant to pin. runAsNonRoot still
+  # gets enforced (Kubernetes checks whatever user the image resolves to).
+  # fsGroup provides access to the key Secret and the writable PKI volume.
   podSecurityContext:
     fsGroup: 10001
     runAsNonRoot: true
 
-  # Used by the minion and the key preparation init container.
+  # No added capabilities. The minion and key preparation init container
+  # use this context and run without privilege escalation.
   containerSecurityContext:
     allowPrivilegeEscalation: false
     runAsNonRoot: true
     capabilities:
       drop:
         - ALL
-
-  initContainers:
-    fixPkiPerms:
-      enabled: true
 
   # ── in_cluster mode settings ──────────────────────────────────────────────
   image:
@@ -91,10 +91,20 @@ agent:
     privateKeyB64: ""
     publicKeyB64: ""
 
-    # Existing Secret with raw minion.pem/minion.pub entries or base64 text
-    # in private-key-b64/public-key-b64. When empty, the chart creates one.
+    # Name of an EXISTING Kubernetes Secret (created out-of-band, never via
+    # Helm values) with raw 'minion.pem' and 'minion.pub' entries or
+    # base64-encoded PEM in 'private-key-b64' and 'public-key-b64'. When
+    # empty, the chart creates a Secret from inline keys or, when explicitly
+    # enabled below, a keygen Job.
+    # For pre-registered trust, the minion's public key must already be
+    # trusted (e.g. via salt-key-operator's SaltMinionKey - see
+    # ../../salt-key-operator) *before* the minion starts, so it must be
+    # handed that exact keypair rather than generating its own, which the
+    # trust store would never have been told about.
     keySecretName: ""
 
+    # Explicit opt-in to generating a keypair when no keys are supplied.
+    # The generated public key must be accepted by the Salt master.
     allowSelfGeneratedKey: false
 
   # Optional Vault integration (saltext.vault, baked into this chart's
