@@ -51,13 +51,8 @@ spec:
               chmod 0700 /pki/minion
               temporary_directory="$(mktemp -d /pki/minion/.keys.XXXXXX)"
               trap 'rm -rf "$temporary_directory"' EXIT
-              if [ -f /var/run/salt-minion-keys/minion.pem ]; then
-                cp /var/run/salt-minion-keys/minion.pem "$temporary_directory/minion.pem"
-                cp /var/run/salt-minion-keys/minion.pub "$temporary_directory/minion.pub"
-              else
-                base64 -d /var/run/salt-minion-keys/private-key-b64 > "$temporary_directory/minion.pem"
-                base64 -d /var/run/salt-minion-keys/public-key-b64 > "$temporary_directory/minion.pub"
-              fi
+              cp /var/run/salt-minion-keys/minion.pem "$temporary_directory/minion.pem"
+              cp /var/run/salt-minion-keys/minion.pub "$temporary_directory/minion.pub"
               test -s "$temporary_directory/minion.pem"
               test -s "$temporary_directory/minion.pub"
               chmod 0400 "$temporary_directory/minion.pem"

@@ -93,8 +93,7 @@ agent:
     publicKeyB64: ""
 
     # Name of an EXISTING Kubernetes Secret (created out-of-band, never via
-    # Helm values) with raw 'minion.pem' and 'minion.pub' entries or
-    # base64-encoded PEM in 'private-key-b64' and 'public-key-b64'. When
+    # Helm values) with raw 'minion.pem' and 'minion.pub' entries. When
     # empty, the chart creates a Secret from privateKeyB64 and publicKeyB64
     # or, when explicitly enabled below, a keygen Job.
     # For pre-registered trust, the minion's public key must already be

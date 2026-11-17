@@ -276,7 +276,7 @@ credentials:
 
 ### Key Management
 
-The key preparation init container and minion use the same image and container security context. The pod `fsGroup` gives them access to the Secret and PKI volume. Existing Secrets can contain raw `minion.pem` and `minion.pub` files or base64-encoded PEM text in `private-key-b64` and `public-key-b64`. Set `agent.minion.privateKeyB64` and `agent.minion.publicKeyB64` together.
+The key preparation init container and minion use the same image and container security context. The pod `fsGroup` gives them access to the Secret and PKI volume. Secrets must provide `minion.pem` and `minion.pub` files containing PEM text. Set `agent.minion.privateKeyB64` and `agent.minion.publicKeyB64` together to create this Secret from base64-encoded PEM values.
 
 #### Pre-Seeded Keys
 
