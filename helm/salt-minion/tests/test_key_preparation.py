@@ -70,7 +70,7 @@ class KeyPreparationTest(unittest.TestCase):
                              0o400 if name == "minion.pem" else 0o644)
         self.assertEqual(list(self.destination.glob(".keys.*")), [])
 
-    def test_raw_keys(self):
+    def test_copies_mounted_secret_files(self):
         self.write_source()
         result = self.prepare()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -78,16 +78,36 @@ class KeyPreparationTest(unittest.TestCase):
 
     def test_keys_from_rendered_secret(self):
         chart = Path(__file__).resolve().parents[1]
-        values = {"agent": {"minion": {
-            "privateKeyB64": base64.b64encode(self.keys["minion.pem"]).decode(),
-            "publicKeyB64": base64.b64encode(self.keys["minion.pub"]).decode(),
-        }}}
+        release = "custom-release"
+        namespace = "custom-namespace"
+        values = {
+            "namespace": namespace,
+            "agent": {"minion": {
+                "privateKeyB64": base64.b64encode(self.keys["minion.pem"]).decode(),
+                "publicKeyB64": base64.b64encode(self.keys["minion.pub"]).decode(),
+            }},
+        }
         rendered = subprocess.run(
-            ["helm", "template", "test", str(chart), "--show-only",
-             "templates/minion-secret.yaml", "-f", "-"],
+            ["helm", "template", release, str(chart), "--namespace", namespace,
+             "--show-only", "templates/minion-secret.yaml",
+             "--show-only", "templates/deployment.yaml", "-f", "-"],
             input=yaml.safe_dump(values), check=True, capture_output=True, text=True,
         )
-        data = yaml.safe_load(rendered.stdout)["data"]
+        resources = {resource["kind"]: resource
+                     for resource in yaml.safe_load_all(rendered.stdout)}
+        secret = resources["Secret"]
+        deployment = resources["Deployment"]
+        self.assertEqual(secret["metadata"]["name"], f"{release}-keys")
+        self.assertEqual(secret["metadata"]["namespace"], namespace)
+        self.assertEqual(deployment["metadata"]["namespace"], namespace)
+        pod = deployment["spec"]["template"]["spec"]
+        source = next(volume for volume in pod["volumes"]
+                      if volume["name"] == "minion-keys-source")
+        self.assertEqual(source["secret"]["secretName"], secret["metadata"]["name"])
+        init = next(container for container in pod["initContainers"]
+                    if container["name"] == "prepare-minion-keys")
+        self.command = init["command"]
+        data = secret["data"]
         self.assertEqual(set(data), set(self.keys))
         # Model Kubernetes decoding Secret.data into mounted files once.
         for name, content in data.items():
@@ -112,14 +132,23 @@ class KeyPreparationTest(unittest.TestCase):
         self.write_source()
         result = self.prepare()
         self.assertEqual(result.returncode, 0, result.stderr)
-        for missing in ("minion.pem", "minion.pub"):
-            with self.subTest(missing=missing):
-                for path in self.source.iterdir():
-                    path.unlink()
-                self.write_source()
-                (self.source / missing).unlink()
-                self.assertNotEqual(self.prepare().returncode, 0)
-                self.assert_prepared()
+        for name in ("minion.pem", "minion.pub"):
+            for failure in ("missing", "empty"):
+                with self.subTest(file=name, failure=failure):
+                    for path in self.source.iterdir():
+                        path.unlink()
+                    # Different source bytes expose partial destination replacement.
+                    for source_name, original in self.keys.items():
+                        path = self.source / source_name
+                        path.write_bytes(original + b"replacement")
+                    if failure == "missing":
+                        (self.source / name).unlink()
+                    else:
+                        (self.source / name).write_bytes(b"")
+                    for path in self.source.iterdir():
+                        path.chmod(0o440)
+                    self.assertNotEqual(self.prepare().returncode, 0)
+                    self.assert_prepared()
 
 
 if __name__ == "__main__":

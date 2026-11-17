@@ -1,15 +1,38 @@
 suite: keygen RoleBinding
 templates:
   - templates/minion-keygen-rb.yaml
+release:
+  name: custom-release
+  namespace: custom-namespace
+set:
+  namespace: custom-namespace
+  serviceAccount.name: custom-minion
 tests:
-  - it: creates the resource when key generation is enabled
+  - it: creates the RoleBinding when key generation is enabled
     set:
       agent.minion.allowSelfGeneratedKey: true
     asserts:
       - hasDocuments:
           count: 1
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: custom-release-minion-keygen-role
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: custom-minion
+              namespace: custom-namespace
 
-  - it: does not create the resource for an existing Secret
+  - it: does not create the RoleBinding when a Secret name is supplied
     set:
       agent.minion.keySecretName: existing-keys
       agent.minion.allowSelfGeneratedKey: true
@@ -17,7 +40,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: does not create the resource for keys supplied through Helm values
+  - it: does not create the RoleBinding for keys supplied through Helm values
     set:
       agent.minion.privateKeyB64: cHJpdmF0ZQ==
       agent.minion.publicKeyB64: cHVibGlj
@@ -26,7 +49,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: does not create the resource in external mode
+  - it: does not create the RoleBinding in external mode
     set:
       agent.authMode: external
       agent.minion.allowSelfGeneratedKey: true
@@ -34,12 +57,14 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: does not create the resource when generation is disabled
+  - it: does not create the RoleBinding when generation is disabled
+    set:
+      agent.minion.allowSelfGeneratedKey: false
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: does not create the resource when RBAC is managed externally
+  - it: does not create the RoleBinding when RBAC is managed externally
     set:
       agent.minion.allowSelfGeneratedKey: true
       rbac.create: false

@@ -14,7 +14,7 @@ tests:
           value: true
       - equal:
           path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.defaultMode
-          value: 288
+          value: 288  # 0440: owner and group read access
       - equal:
           path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.secretName
           value: RELEASE-NAME-keys
@@ -73,6 +73,13 @@ tests:
           count: 0
 
   - it: rejects missing keys when generation is disabled
+    set:
+      agent.minion.allowSelfGeneratedKey: false
+    asserts:
+      - failedTemplate:
+          errorMessage: set agent.minion.keySecretName or both agent.minion.privateKeyB64 and agent.minion.publicKeyB64, or enable agent.minion.allowSelfGeneratedKey
+
+  - it: requires a key source by default
     asserts:
       - failedTemplate:
           errorMessage: set agent.minion.keySecretName or both agent.minion.privateKeyB64 and agent.minion.publicKeyB64, or enable agent.minion.allowSelfGeneratedKey
