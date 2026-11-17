@@ -17,7 +17,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: does not create the resource for inline keys
+  - it: does not create the resource for keys supplied through Helm values
     set:
       agent.minion.privateKeyB64: cHJpdmF0ZQ==
       agent.minion.publicKeyB64: cHVibGlj
@@ -35,6 +35,14 @@ tests:
           count: 0
 
   - it: does not create the resource when generation is disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the resource when RBAC is managed externally
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+      rbac.create: false
     asserts:
       - hasDocuments:
           count: 0

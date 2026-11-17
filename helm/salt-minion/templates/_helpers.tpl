@@ -1,5 +1,5 @@
 {{/* Validation */}}
-{{- define "salt-minion.validateInlineKeys" -}}
+{{- define "salt-minion.validateKeyPair" -}}
 {{- $minion := .Values.agent.minion -}}
 {{- if ne (empty $minion.privateKeyB64) (empty $minion.publicKeyB64) -}}
 {{- fail "agent.minion.privateKeyB64 and agent.minion.publicKeyB64 must be set together" -}}
@@ -9,7 +9,7 @@
 {{- define "salt-minion.validateKeySource" -}}
 {{- $minion := .Values.agent.minion -}}
 {{- if not (or $minion.keySecretName $minion.privateKeyB64 $minion.allowSelfGeneratedKey) -}}
-{{- fail "set agent.minion.keySecretName or inline keys, or enable agent.minion.allowSelfGeneratedKey" -}}
+{{- fail "set agent.minion.keySecretName or both agent.minion.privateKeyB64 and agent.minion.publicKeyB64, or enable agent.minion.allowSelfGeneratedKey" -}}
 {{- end -}}
 {{- end -}}
 
@@ -34,7 +34,7 @@
 {{- end -}}
 
 {{/* Enabled decisions */}}
-{{- define "salt-minion.inlineSecretEnabled" -}}
+{{- define "salt-minion.keySecretEnabled" -}}
 {{- if .Values.agent.minion.privateKeyB64 -}}
 true
 {{- end -}}

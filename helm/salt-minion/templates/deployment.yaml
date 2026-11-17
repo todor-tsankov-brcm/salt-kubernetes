@@ -1,5 +1,5 @@
-{{- include "salt-minion.validateKeySource" . -}}
 {{- if eq .Values.agent.authMode "in_cluster" }}
+{{- include "salt-minion.validateKeySource" . -}}
 {{- $keySecret := include "salt-minion.keySecretName" . }}
 apiVersion: apps/v1
 kind: Deployment

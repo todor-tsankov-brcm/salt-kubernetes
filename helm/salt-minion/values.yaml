@@ -10,7 +10,7 @@ agent:
 
   # No numeric runAsUser/runAsGroup here on purpose - the image runs
   # as the 'salt' system user salt-common's own postinst creates, whose
-  # numeric uid isn't a stable constant to pin. runAsNonRoot still
+  # numeric uid isn't a stable constant to pin. runAsNonRoot alone still
   # gets enforced (Kubernetes checks whatever user the image resolves to).
   # fsGroup provides access to the key Secret and the writable PKI volume.
   podSecurityContext:
@@ -95,8 +95,8 @@ agent:
     # Name of an EXISTING Kubernetes Secret (created out-of-band, never via
     # Helm values) with raw 'minion.pem' and 'minion.pub' entries or
     # base64-encoded PEM in 'private-key-b64' and 'public-key-b64'. When
-    # empty, the chart creates a Secret from inline keys or, when explicitly
-    # enabled below, a keygen Job.
+    # empty, the chart creates a Secret from privateKeyB64 and publicKeyB64
+    # or, when explicitly enabled below, a keygen Job.
     # For pre-registered trust, the minion's public key must already be
     # trusted (e.g. via salt-key-operator's SaltMinionKey - see
     # ../../salt-key-operator) *before* the minion starts, so it must be
@@ -104,8 +104,9 @@ agent:
     # trust store would never have been told about.
     keySecretName: ""
 
-    # Explicit opt-out of the keySecretName requirement above when inline
-    # keys are not supplied - allows the keygen Job to create a keypair.
+    # Explicit opt-out of the keySecretName requirement above when
+    # privateKeyB64 and publicKeyB64 are not supplied - allows the keygen
+    # Job to create a keypair.
     # The generated public key must be accepted by the Salt master.
     # Named explicitly rather than just leaving keySecretName empty, so
     # choosing this behavior is a deliberate, visible decision in your

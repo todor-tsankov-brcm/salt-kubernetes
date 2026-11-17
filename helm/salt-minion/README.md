@@ -5,7 +5,7 @@ Kubernetes compliance assessment support via kube-bench on-demand Jobs.
 
 Features:
 - In-cluster or external minion deployment modes
-- Automatic minion key generation via Job
+- Automatic minion key generation via pre-install Job
 - Health checks (liveness and readiness probes)
 - Vault integration for secrets management
 - Multi-master connectivity support
@@ -42,7 +42,7 @@ Selected via `agent.authMode`:
 - Kubernetes 1.24+
 - Helm 3+
 - Salt Master reachable from minion (required for in_cluster mode)
-- Provide `agent.minion.keySecretName` or both inline keys, or explicitly enable `agent.minion.allowSelfGeneratedKey`.
+- For in-cluster mode, provide `agent.minion.keySecretName` or both `agent.minion.privateKeyB64` and `agent.minion.publicKeyB64`, or explicitly enable `agent.minion.allowSelfGeneratedKey`.
 - Persistent storage (optional, for PKI persistence)
 
 ## Quick Start
@@ -52,6 +52,7 @@ Selected via `agent.authMode`:
 ```bash
 # Install with basic configuration
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com
@@ -62,8 +63,7 @@ helm install salt-minion ./helm/salt-minion \
 ```bash
 # Install RBAC only
 helm install salt-minion ./helm/salt-minion \
-  --set agent.authMode=external \
-  --set agent.minion.keySecretName=my-minion-keys
+  --set agent.authMode=external
 
 # Get token for external minion's kubeconfig
 kubectl create token salt-minion -n salt
@@ -75,6 +75,7 @@ kubectl create token salt-minion -n salt
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com
@@ -86,6 +87,7 @@ For production, enable PKI persistence to maintain minion identity across restar
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com \
@@ -99,6 +101,7 @@ Enable Vault for secure secret sourcing:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com \
@@ -112,6 +115,7 @@ Connect to multiple masters simultaneously:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set 'agent.saltMasterHost={master-0.example.com,master-1.example.com,master-2.example.com}'
@@ -186,8 +190,12 @@ See [values.yaml](values.yaml) for the complete list of configuration options.
 | --- | --- | --- |
 | `namespace` | Kubernetes namespace for deployment | `salt` |
 | `agent.authMode` | `in_cluster` or `external` | `in_cluster` |
-| `agent.minion.allowSelfGeneratedKey` | Allow the keygen Job when no keys are supplied | `false` |
+| `agent.minion.keySecretName` | Key Secret name. Uses an existing Secret unless `privateKeyB64` and `publicKeyB64` are supplied to create it. Empty uses `<release-name>-keys` | `""` |
+| `agent.minion.privateKeyB64` | Base64-encoded private PEM key; requires `publicKeyB64` | `""` |
+| `agent.minion.publicKeyB64` | Base64-encoded public PEM key; requires `privateKeyB64` | `""` |
+| `agent.minion.allowSelfGeneratedKey` | Allow the keygen Job in in-cluster mode when `keySecretName`, `privateKeyB64`, and `publicKeyB64` are empty | `false` |
 | `agent.podSecurityContext.fsGroup` | Group with access to the key Secret and PKI volume | `10001` |
+| `agent.containerSecurityContext` | Security context shared by the minion and key-preparation init container | `{"allowPrivilegeEscalation": false, "runAsNonRoot": true, "capabilities": {"drop": ["ALL"]}}` |
 | `agent.image.repository` | Minion image repository | `ghcr.io/saltstack/salt-kubernetes/salt-minion` |
 | `agent.image.tag` | Image tag/version | `0.1.0` |
 | `agent.image.pullPolicy` | Image pull policy | `IfNotPresent` |
@@ -218,6 +226,7 @@ Requires a StorageClass:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --set agent.persistence.enabled=true \
   --set agent.persistence.type=pvc \
   --set agent.persistence.size=1Gi
@@ -227,6 +236,7 @@ Or use an existing PVC:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --set agent.persistence.enabled=true \
   --set agent.persistence.pvc.existingClaim=my-pvc
 ```
@@ -237,6 +247,7 @@ For clusters without dynamic provisioning:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --set agent.persistence.enabled=true \
   --set agent.persistence.type=hostPath \
   --set agent.persistence.hostPath.path=/var/lib/salt-minion/pki \
@@ -265,7 +276,7 @@ credentials:
 
 ### Key Management
 
-The key preparation init container and minion use the same image and container security context. The pod `fsGroup` gives them access to the Secret and PKI volume. Existing Secrets can contain raw `minion.pem` and `minion.pub` files or base64-encoded PEM text in `private-key-b64` and `public-key-b64`. Set both inline key values together.
+The key preparation init container and minion use the same image and container security context. The pod `fsGroup` gives them access to the Secret and PKI volume. Existing Secrets can contain raw `minion.pem` and `minion.pub` files or base64-encoded PEM text in `private-key-b64` and `public-key-b64`. Set `agent.minion.privateKeyB64` and `agent.minion.publicKeyB64` together.
 
 #### Pre-Seeded Keys
 
@@ -285,7 +296,7 @@ helm install salt-minion ./helm/salt-minion \
 
 #### Auto-Generated Keys
 
-The chart's Job automatically generates keys:
+The chart's pre-install Job automatically generates keys:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
@@ -314,6 +325,7 @@ For Salt's native multi-master setup:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --set 'agent.saltMasterHost=master-0.example.com,master-1.example.com,master-2.example.com'
 ```
 
