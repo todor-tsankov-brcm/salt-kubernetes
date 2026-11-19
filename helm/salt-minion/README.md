@@ -42,6 +42,7 @@ Selected via `agent.authMode`:
 - Kubernetes 1.24+
 - Helm 3+
 - Salt Master reachable from minion (required for in_cluster mode)
+- For in-cluster mode, provide `agent.minion.keySecretName` or both `agent.minion.privateKeyB64` and `agent.minion.publicKeyB64`, or explicitly enable `agent.minion.allowSelfGeneratedKey`.
 - Persistent storage (optional, for PKI persistence)
 
 ## Quick Start
@@ -51,6 +52,7 @@ Selected via `agent.authMode`:
 ```bash
 # Install with basic configuration
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com
@@ -73,6 +75,7 @@ kubectl create token salt-minion -n salt
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com
@@ -84,6 +87,7 @@ For production, enable PKI persistence to maintain minion identity across restar
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com \
@@ -97,6 +101,7 @@ Enable Vault for secure secret sourcing:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com \
@@ -110,6 +115,7 @@ Connect to multiple masters simultaneously:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --namespace salt \
   --create-namespace \
   --set 'agent.saltMasterHost={master-0.example.com,master-1.example.com,master-2.example.com}'
@@ -184,10 +190,18 @@ See [values.yaml](values.yaml) for the complete list of configuration options.
 | --- | --- | --- |
 | `namespace` | Kubernetes namespace for deployment | `salt` |
 | `agent.authMode` | `in_cluster` or `external` | `in_cluster` |
+| `agent.minion.keySecretName` | Key Secret name. Uses an existing Secret unless `privateKeyB64` and `publicKeyB64` are supplied to create it. Empty uses `<release-name>-keys` | `""` |
+| `agent.minion.privateKeyB64` | Base64-encoded private PEM key; requires `publicKeyB64` | `""` |
+| `agent.minion.publicKeyB64` | Base64-encoded public PEM key; requires `privateKeyB64` | `""` |
+| `agent.minion.allowSelfGeneratedKey` | Allow the keygen Job in in-cluster mode when `keySecretName`, `privateKeyB64`, and `publicKeyB64` are empty | `false` |
+| `agent.podSecurityContext` | Pod security context shared by the minion and key-preparation init container | See [values.yaml](values.yaml) |
+| `agent.containerSecurityContext` | Container security context applied to both the minion and key-preparation init container | See [values.yaml](values.yaml) |
 | `agent.image.repository` | Minion image repository | `ghcr.io/saltstack/salt-kubernetes/salt-minion` |
 | `agent.image.tag` | Image tag/version | `0.1.0` |
 | `agent.image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `agent.image.imagePullSecrets` | Minion pull Secrets | `[]` |
+| `keygen.podSecurityContext` | Pod security context for the key-generation Job | See [values.yaml](values.yaml) |
+| `keygen.containerSecurityContext` | Container security context for key generation | See [values.yaml](values.yaml) |
 | `keygen.image.repository` | Keygen image repository | `bitnami/kubectl` |
 | `keygen.image.tag` | Keygen image tag | `latest` |
 | `keygen.image.pullPolicy` | Keygen image pull policy | `Always` |
@@ -214,6 +228,7 @@ Requires a StorageClass:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --set agent.persistence.enabled=true \
   --set agent.persistence.type=pvc \
   --set agent.persistence.size=1Gi
@@ -223,6 +238,7 @@ Or use an existing PVC:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --set agent.persistence.enabled=true \
   --set agent.persistence.pvc.existingClaim=my-pvc
 ```
@@ -233,6 +249,7 @@ For clusters without dynamic provisioning:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --set agent.persistence.enabled=true \
   --set agent.persistence.type=hostPath \
   --set agent.persistence.hostPath.path=/var/lib/salt-minion/pki \
@@ -261,19 +278,23 @@ credentials:
 
 ### Key Management
 
+Provide the minion keypair using one of these options:
+
+- Set `agent.minion.keySecretName` to an existing Secret containing `minion.pem` (private key) and `minion.pub` (public key), both as PEM text.
+- Set `agent.minion.privateKeyB64` and `agent.minion.publicKeyB64` together to have the chart create a Secret from base64-encoded PEM values.
+- Set `agent.minion.allowSelfGeneratedKey=true` to generate a keypair when none is supplied.
+
+The Salt master must trust the minion's public key. After changing the keypair in the Secret, recreate the minion Pod to apply it.
+
 #### Pre-Seeded Keys
 
 For production with pre-generated keys:
 
 ```bash
-# Encode keys
-PRIVATE_KEY=$(base64 -w0 < /path/to/minion.pem)
-PUBLIC_KEY=$(base64 -w0 < /path/to/minion.pub)
-
 # Create secret
 kubectl create secret generic my-minion-keys \
-  --from-literal=minion.pem="$PRIVATE_KEY" \
-  --from-literal=minion.pub="$PUBLIC_KEY" \
+  --from-file=minion.pem=/path/to/minion.pem \
+  --from-file=minion.pub=/path/to/minion.pub \
   -n salt
 
 # Use in Helm
@@ -287,7 +308,7 @@ The chart's pre-install Job automatically generates keys:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
-  --set agent.minion.keySecretName=""  # Let job create it
+  --set agent.minion.allowSelfGeneratedKey=true
 ```
 
 ### Health Checks
@@ -312,6 +333,7 @@ For Salt's native multi-master setup:
 
 ```bash
 helm install salt-minion ./helm/salt-minion \
+  --set agent.minion.allowSelfGeneratedKey=true \
   --set 'agent.saltMasterHost=master-0.example.com,master-1.example.com,master-2.example.com'
 ```
 
@@ -340,7 +362,7 @@ The comma-separated list is converted to a YAML list in minion configuration.
 
 The chart applies comprehensive security controls:
 
-- Runs as non-root user (UID 10000)
+- Runs as a non-root user by default
 - Disables privilege escalation
 - Drops all Linux capabilities
 - Private keys stored with mode 0400

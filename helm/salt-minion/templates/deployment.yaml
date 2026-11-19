@@ -1,5 +1,6 @@
-{{- if eq .Values.agent.authMode "in_cluster" }}
-{{- $keySecret := .Values.agent.minion.keySecretName | default (printf "%s-keys" .Release.Name) }}
+{{- if include "salt-minion.deploymentEnabled" . }}
+{{- include "salt-minion.validateKeySource" . -}}
+{{- $keySecret := include "salt-minion.keySecretName" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -45,34 +46,30 @@ spec:
             - |
               set -eu
 
+              umask 077
+              test -s /var/run/salt-minion-keys/minion.pem
+              test -s /var/run/salt-minion-keys/minion.pub
+
+              mkdir -p /pki/minion
+              chmod 0700 /pki/minion
+              rm -f /pki/minion/minion.pem /pki/minion/minion.pub
               cp /var/run/salt-minion-keys/minion.pem \
-                 /etc/salt/pki/minion/minion.pem
-
+                 /pki/minion/minion.pem
               cp /var/run/salt-minion-keys/minion.pub \
-                 /etc/salt/pki/minion/minion.pub
+                 /pki/minion/minion.pub
 
-              chown -R 10001:10001 /etc/salt/pki/minion
-              chmod 0700 /etc/salt/pki/minion
-              chmod 0400 /etc/salt/pki/minion/minion.pem
-              chmod 0644 /etc/salt/pki/minion/minion.pub
+              test -s /pki/minion/minion.pem
+              test -s /pki/minion/minion.pub
+              chmod 0400 /pki/minion/minion.pem
+              chmod 0644 /pki/minion/minion.pub
           volumeMounts:
             - name: minion-keys-source
               mountPath: /var/run/salt-minion-keys
               readOnly: true
             - name: minion-pki
-              mountPath: /etc/salt/pki/minion
+              mountPath: /pki
           securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-            runAsNonRoot: false
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - FOWNER
-                - DAC_OVERRIDE
+            {{- toYaml .Values.agent.containerSecurityContext | nindent 12 }}
 
       containers:
         - name: salt-minion
@@ -80,11 +77,7 @@ spec:
           imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
           env:
             - name: SALT_MASTER
-              {{- if kindIs "slice" .Values.agent.saltMasterHost }}
-              value: {{ join "," .Values.agent.saltMasterHost | quote }}
-              {{- else }}
-              value: {{ .Values.agent.saltMasterHost | quote }}
-              {{- end }}
+              value: {{ include "salt-minion.masterHost" . | quote }}
 
             - name: SALT_MASTER_PORT
               value: {{ .Values.agent.saltMasterPort | quote }}
@@ -147,6 +140,7 @@ spec:
           volumeMounts:
             - name: minion-pki
               mountPath: /etc/salt/pki/minion
+              subPath: minion
 
           livenessProbe:
             exec:
@@ -177,6 +171,7 @@ spec:
         - name: minion-keys-source
           secret:
             secretName: {{ $keySecret }}
+            defaultMode: 0444
 
         - name: minion-pki
           emptyDir: {}

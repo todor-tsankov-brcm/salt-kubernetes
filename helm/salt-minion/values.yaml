@@ -8,38 +8,22 @@ agent:
   #   external   — create RBAC only; the minion runs outside the cluster
   authMode: in_cluster
 
-  # No numeric runAsUser/runAsGroup/fsGroup here on purpose - the image runs
-  # as the 'salt' system user salt-common's own postinst creates, whose
-  # numeric uid isn't a stable constant to pin. runAsNonRoot alone still
-  # gets enforced (Kubernetes checks whatever user the image resolves to).
+  # Identity inherited by the minion and key preparation container.
+  # PKI access uses UID ownership; no fsGroup is required.
   podSecurityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
     runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
 
-  # No added capabilities: when agent.persistence.enabled mounts a
-  # PVC/hostPath at /etc/salt/pki, it comes back root-owned regardless of
-  # fsGroup, and capabilities.add can't fix that either - not every
-  # container runtime populates the *ambient* capability set for a
-  # non-root container (confirmed on this project's own test cluster:
-  # CapBnd includes CHOWN/FOWNER, CapEff/CapAmb are still empty, so the
-  # capability is granted but unusable), and even setcap-based file
-  # capabilities need allowPrivilegeEscalation: true to take effect on
-  # exec. initContainers.fixPkiPerms below (runs as root, once, briefly)
-  # is the tradeoff instead: this long-running container never runs as
-  # root, ever.
+  # No added capabilities. The minion and key preparation init container
+  # use this context and run without privilege escalation.
   containerSecurityContext:
     allowPrivilegeEscalation: false
-    runAsNonRoot: true
     capabilities:
       drop:
         - ALL
-
-  # Only relevant when persistence.enabled mounts a volume at /etc/salt/pki.
-  # Reuses image.repository/tag itself (not e.g. busybox) so it can resolve
-  # 'salt' by name via that image's own /etc/passwd, rather than
-  # duplicating its numeric uid here.
-  initContainers:
-    fixPkiPerms:
-      enabled: true
 
   # ── in_cluster mode settings ──────────────────────────────────────────────
   image:
@@ -108,25 +92,23 @@ agent:
     publicKeyB64: ""
 
     # Name of an EXISTING Kubernetes Secret (created out-of-band, never via
-    # Helm values) with keys 'private-key-b64' and 'public-key-b64' - a
-    # base64-encoded PEM RSA keypair for the minion itself. REQUIRED (the
-    # chart fails fast otherwise - see allowSelfGeneratedKey below for the
-    # escape hatch): the minion's public key must already be registered as
+    # Helm values) with raw 'minion.pem' and 'minion.pub' entries. When
+    # empty, the chart creates a Secret from privateKeyB64 and publicKeyB64
+    # or, when explicitly enabled below, a keygen Job.
+    # For pre-registered trust, the minion's public key must already be
     # trusted (e.g. via salt-key-operator's SaltMinionKey - see
     # ../../salt-key-operator) *before* the minion starts, so it must be
     # handed that exact keypair rather than generating its own, which the
-    # trust store would never have been told about. With
-    # agent.persistence.enabled=false (the default), a self-generated key
-    # also wouldn't even survive a pod restart.
+    # trust store would never have been told about.
     keySecretName: ""
 
-    # Explicit opt-out of the keySecretName requirement above - falls back
-    # to the minion generating its own keypair on first start. Only makes
-    # sense combined with agent.persistence.enabled=true (otherwise a fresh
-    # keypair, and a fresh unaccepted minion, appears on every pod
-    # restart). Named explicitly rather than just leaving keySecretName
-    # empty, so choosing this legacy behavior is a deliberate, visible
-    # decision in your values file.
+    # Explicit opt-out of the keySecretName requirement above when
+    # privateKeyB64 and publicKeyB64 are not supplied - allows the keygen
+    # Job to create a keypair.
+    # The generated public key must be accepted by the Salt master.
+    # Named explicitly rather than just leaving keySecretName empty, so
+    # choosing this behavior is a deliberate, visible decision in your
+    # values file.
     allowSelfGeneratedKey: false
 
   # Optional Vault integration (saltext.vault, baked into this chart's
@@ -173,6 +155,18 @@ agent:
   nodeSelector: {}
 
 keygen:
+  # Use the keygen image's default user, with restricted pod security settings.
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
   image:
     imagePullSecrets: []
     repository: bitnami/kubectl

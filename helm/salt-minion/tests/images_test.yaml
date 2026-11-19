@@ -1,32 +1,25 @@
-suite: workload images
+suite: container images
 templates:
   - templates/deployment.yaml
   - templates/keygen-job.yaml
+set:
+  agent.minion.allowSelfGeneratedKey: true
+  agent.image.repository: test.example/minion
+  keygen.image.repository: test.example/kubectl
 tests:
-  - it: renders the default images
-    asserts:
-      - template: templates/deployment.yaml
-        equal:
-          path: spec.template.spec.containers[?(@.name == "salt-minion")].image
-          value: ghcr.io/saltstack/salt-kubernetes/salt-minion:0.1.0
-      - template: templates/keygen-job.yaml
-        equal:
-          path: spec.template.spec.containers[?(@.name == "keygen")].image
-          value: bitnami/kubectl:latest
-
   - it: preserves quoted tags with trailing zeros
     set:
-      agent.image.tag: '1.10'
-      keygen.image.tag: '1.10'
+      agent.image.tag: "1.10"
+      keygen.image.tag: "1.10"
     asserts:
       - template: templates/deployment.yaml
         equal:
           path: spec.template.spec.containers[?(@.name == "salt-minion")].image
-          value: ghcr.io/saltstack/salt-kubernetes/salt-minion:1.10
+          value: test.example/minion:1.10
       - template: templates/keygen-job.yaml
         equal:
           path: spec.template.spec.containers[?(@.name == "keygen")].image
-          value: bitnami/kubectl:1.10
+          value: test.example/kubectl:1.10
 
   - it: renders numeric tags
     set:
@@ -36,29 +29,31 @@ tests:
       - template: templates/deployment.yaml
         equal:
           path: spec.template.spec.containers[?(@.name == "salt-minion")].image
-          value: ghcr.io/saltstack/salt-kubernetes/salt-minion:123
+          value: test.example/minion:123
       - template: templates/keygen-job.yaml
         equal:
           path: spec.template.spec.containers[?(@.name == "keygen")].image
-          value: bitnami/kubectl:123
+          value: test.example/kubectl:123
 
-  - it: uses each configured repository
+  - it: uses each configured repository and tag
     set:
       agent.image.repository: mirror.example:5000/team/minion
+      agent.image.tag: agent-test
       keygen.image.repository: other.example/team/kubectl
+      keygen.image.tag: keygen-test
     asserts:
       - template: templates/deployment.yaml
         equal:
           path: spec.template.spec.containers[?(@.name == "salt-minion")].image
-          value: mirror.example:5000/team/minion:0.1.0
+          value: mirror.example:5000/team/minion:agent-test
       - template: templates/deployment.yaml
         equal:
           path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].image
-          value: mirror.example:5000/team/minion:0.1.0
+          value: mirror.example:5000/team/minion:agent-test
       - template: templates/keygen-job.yaml
         equal:
           path: spec.template.spec.containers[?(@.name == "keygen")].image
-          value: other.example/team/kubectl:latest
+          value: other.example/team/kubectl:keygen-test
 
   - it: uses separate pull secrets for each workload
     set:

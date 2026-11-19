@@ -1,0 +1,189 @@
+suite: key generation
+templates:
+  - templates/keygen-job.yaml
+  - templates/minion-keygen-role.yaml
+  - templates/minion-keygen-rb.yaml
+release:
+  name: custom-release
+  namespace: custom-namespace
+set:
+  namespace: custom-namespace
+  serviceAccount.name: custom-minion
+tests:
+  - it: creates the Job when key generation is enabled
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/keygen-job.yaml
+      - isKind:
+          of: Job
+        template: templates/keygen-job.yaml
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+        template: templates/keygen-job.yaml
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: custom-minion
+        template: templates/keygen-job.yaml
+
+  - it: runs key generation with restricted security defaults
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - template: templates/keygen-job.yaml
+        equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - template: templates/keygen-job.yaml
+        equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - template: templates/keygen-job.yaml
+        equal:
+          path: spec.template.spec.containers[?(@.name == "keygen")].securityContext.allowPrivilegeEscalation
+          value: false
+      - template: templates/keygen-job.yaml
+        equal:
+          path: spec.template.spec.containers[?(@.name == "keygen")].securityContext.capabilities.drop
+          value: [ALL]
+
+  - it: creates the Role when key generation is enabled
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/minion-keygen-role.yaml
+      - isKind:
+          of: Role
+        template: templates/minion-keygen-role.yaml
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+        template: templates/minion-keygen-role.yaml
+      - equal:
+          path: metadata.name
+          value: custom-release-minion-keygen-role
+        template: templates/minion-keygen-role.yaml
+      - equal:
+          path: rules
+          value:
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - get
+                - list
+        template: templates/minion-keygen-role.yaml
+
+  - it: creates the RoleBinding when key generation is enabled
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/minion-keygen-rb.yaml
+      - isKind:
+          of: RoleBinding
+        template: templates/minion-keygen-rb.yaml
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+        template: templates/minion-keygen-rb.yaml
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: custom-release-minion-keygen-role
+        template: templates/minion-keygen-rb.yaml
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: custom-minion
+              namespace: custom-namespace
+        template: templates/minion-keygen-rb.yaml
+
+  - it: skips key generation resources when an existing Secret is supplied
+    set:
+      agent.minion.keySecretName: existing-keys
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - template: templates/keygen-job.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-role.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-rb.yaml
+        hasDocuments:
+          count: 0
+
+  - it: skips key generation resources for keys supplied through Helm values
+    set:
+      agent.minion.privateKeyB64: cHJpdmF0ZQ==
+      agent.minion.publicKeyB64: cHVibGlj
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - template: templates/keygen-job.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-role.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-rb.yaml
+        hasDocuments:
+          count: 0
+
+  - it: skips key generation resources in external mode
+    set:
+      agent.authMode: external
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - template: templates/keygen-job.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-role.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-rb.yaml
+        hasDocuments:
+          count: 0
+
+  - it: skips key generation resources when generation is disabled
+    set:
+      agent.minion.allowSelfGeneratedKey: false
+    asserts:
+      - template: templates/keygen-job.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-role.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-rb.yaml
+        hasDocuments:
+          count: 0
+
+  - it: creates only the Job when RBAC is managed externally
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+      rbac.create: false
+    asserts:
+      - template: templates/keygen-job.yaml
+        hasDocuments:
+          count: 1
+      - template: templates/keygen-job.yaml
+        isKind:
+          of: Job
+      - template: templates/minion-keygen-role.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/minion-keygen-rb.yaml
+        hasDocuments:
+          count: 0

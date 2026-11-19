@@ -1,0 +1,97 @@
+suite: minion deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: runs the pod as non-root by default
+    set:
+      agent.minion.keySecretName: existing-keys
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: mounts the generated key Secret read-only for preparation
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.secretName
+          value: RELEASE-NAME-keys
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.defaultMode
+          value: 292 # 0444: readable by the preparation user
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].volumeMounts[?(@.name == "minion-keys-source")].mountPath
+          value: /var/run/salt-minion-keys
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].volumeMounts[?(@.name == "minion-keys-source")].readOnly
+          value: true
+
+  - it: keeps the source Secret out of the minion container
+    set:
+      agent.minion.keySecretName: existing-keys
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name == "salt-minion")].volumeMounts[?(@.name == "minion-keys-source")]
+
+  - it: provides writable PKI storage for key preparation
+    set:
+      agent.minion.keySecretName: existing-keys
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name == "minion-pki")]
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].volumeMounts[?(@.name == "minion-pki")].mountPath
+          value: /pki
+      - notEqual:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].volumeMounts[?(@.name == "minion-pki")].readOnly
+          value: true
+
+  - it: mounts the prepared PKI directory writable in the minion
+    set:
+      agent.minion.keySecretName: existing-keys
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "salt-minion")].volumeMounts[?(@.name == "minion-pki")].mountPath
+          value: /etc/salt/pki/minion
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "salt-minion")].volumeMounts[?(@.name == "minion-pki")].subPath
+          value: minion
+      - notEqual:
+          path: spec.template.spec.containers[?(@.name == "salt-minion")].volumeMounts[?(@.name == "minion-pki")].readOnly
+          value: true
+
+  - it: uses the configured UID for both key preparation and the minion
+    set:
+      agent.minion.keySecretName: existing-keys
+      agent.containerSecurityContext.runAsUser: 4000
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].securityContext.runAsUser
+          value: 4000
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "salt-minion")].securityContext.runAsUser
+          value: 4000
+
+  - it: uses the requested existing Secret
+    set:
+      agent.minion.keySecretName: existing-keys
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.secretName
+          value: existing-keys
+
+  - it: renders external mode without requiring keys
+    set:
+      agent.authMode: external
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: requires a key source by default
+    asserts:
+      - failedTemplate:
+          errorMessage: set agent.minion.keySecretName or both agent.minion.privateKeyB64 and agent.minion.publicKeyB64, or enable agent.minion.allowSelfGeneratedKey

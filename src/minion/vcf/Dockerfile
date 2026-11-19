@@ -69,7 +69,7 @@ RUN set -eu; \
     rm -f /tmp/bootstrap-salt.sh /tmp/bootstrap-salt.sh.sha256 /tmp/bootstrap-salt.sh.sha256.check
 
 # Ensure non‑root salt user exists
-RUN id salt >/dev/null 2>&1 || useradd --system --uid 999 --no-create-home --shell /usr/sbin/nologin salt
+RUN id salt >/dev/null 2>&1 || useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin salt
 
 # Copy the requirements file into the image
 COPY salt-extensions.txt /tmp/salt-extensions.txt
@@ -137,13 +137,9 @@ ENV SALT_MASTER="" \
     VAULT_TOKEN_FILE="" \
     VAULT_SDB_PROFILE="vault_sdb"
 
-# Numeric, not the name: Kubernetes' runAsNonRoot check can't resolve a
-# named USER without executing code inside the image, and refuses to start
-# the container at all ("cannot verify user is non-root") if it can't. 999
-# is what salt-common's own postinst allocates the 'salt' user/group in
-# this build (verify with `id salt` if the base image or install order
-# ever changes).
-USER 999:999
+# Numeric, not the name: Kubernetes' runAsNonRoot check cannot resolve
+# a named USER without executing code inside the image.
+USER 10001:10001
 
 VOLUME ["/etc/salt/pki/minion"]
 

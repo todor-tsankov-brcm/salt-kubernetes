@@ -1,6 +1,5 @@
-{{- $secretName := .Values.agent.minion.keySecretName | default (printf "%s-keys" .Release.Name) -}}
-{{- $existingSecret := lookup "v1" "Secret" .Values.namespace $secretName -}}
-{{- if and (not .Values.agent.minion.keySecretName) (not $existingSecret) }}
+{{- if include "salt-minion.keygenJobEnabled" . }}
+{{- $secretName := include "salt-minion.keySecretName" . }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -11,6 +10,8 @@ spec:
   template:
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      securityContext:
+        {{- toYaml .Values.keygen.podSecurityContext | nindent 8 }}
       {{- with .Values.keygen.image.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -21,6 +22,8 @@ spec:
         - name: keygen
           image: {{ include "salt-minion.keygenImage" . | quote }}
           imagePullPolicy: {{ .Values.keygen.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.keygen.containerSecurityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |
