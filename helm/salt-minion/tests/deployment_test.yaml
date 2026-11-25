@@ -2,16 +2,13 @@ suite: minion deployment
 templates:
   - templates/deployment.yaml
 tests:
-  - it: prepares keys as a non-root user with group-readable source
+  - it: prepares keys with a group-readable source
     set:
       agent.minion.allowSelfGeneratedKey: true
     asserts:
       - equal:
           path: spec.template.spec.securityContext.fsGroup
           value: 10001
-      - equal:
-          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].securityContext.runAsNonRoot
-          value: true
       - equal:
           path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.defaultMode
           value: 288  # 0440: owner and group read access

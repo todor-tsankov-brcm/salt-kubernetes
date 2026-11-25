@@ -9,7 +9,7 @@ Features:
 - Health checks (liveness and readiness probes)
 - Vault integration for secrets management
 - Multi-master connectivity support
-- PKI persistence across pod restarts
+- Stable minion keys stored in a Kubernetes Secret
 - CIS kube-bench integration
 - Security hardened (non-root, no privilege escalation)
 
@@ -30,7 +30,7 @@ Selected via `agent.authMode`:
   - Chart creates Deployment + RBAC (ServiceAccount, Role, ClusterRole, bindings)
   - Minion connects to Salt Master on configured ports
   - Includes health checks for automatic pod recovery
-  - Supports persistent PKI for stable identity
+  - Uses a key Secret for stable identity
   
 - **external** — RBAC only for minion running outside cluster
   - ServiceAccount token available for external kubeconfig
@@ -43,7 +43,6 @@ Selected via `agent.authMode`:
 - Helm 3+
 - Salt Master reachable from minion (required for in_cluster mode)
 - For in-cluster mode, provide `agent.minion.keySecretName` or both `agent.minion.privateKeyB64` and `agent.minion.publicKeyB64`, or explicitly enable `agent.minion.allowSelfGeneratedKey`.
-- Persistent storage (optional, for PKI persistence)
 
 ## Quick Start
 
@@ -79,20 +78,6 @@ helm install salt-minion ./helm/salt-minion \
   --namespace salt \
   --create-namespace \
   --set agent.saltMasterHost=salt-master.example.com
-```
-
-### With Persistent PKI
-
-For production, enable PKI persistence to maintain minion identity across restarts:
-
-```bash
-helm install salt-minion ./helm/salt-minion \
-  --set agent.minion.allowSelfGeneratedKey=true \
-  --namespace salt \
-  --create-namespace \
-  --set agent.saltMasterHost=salt-master.example.com \
-  --set agent.persistence.enabled=true \
-  --set agent.persistence.size=1Gi
 ```
 
 ### With Vault Integration
@@ -190,7 +175,7 @@ See [values.yaml](values.yaml) for the complete list of configuration options.
 | --- | --- | --- |
 | `namespace` | Kubernetes namespace for deployment | `salt` |
 | `agent.authMode` | `in_cluster` or `external` | `in_cluster` |
-| `agent.minion.keySecretName` | Key Secret name. Uses an existing Secret unless `privateKeyB64` and `publicKeyB64` are supplied to create it. Empty uses `<release-name>-keys` | `""` |
+| `agent.minion.keySecretName` | Key Secret name. Uses an existing Secret when inline keys are not supplied. Empty uses `<release-name>-keys` | `""` |
 | `agent.minion.privateKeyB64` | Base64-encoded private PEM key; requires `publicKeyB64` | `""` |
 | `agent.minion.publicKeyB64` | Base64-encoded public PEM key; requires `privateKeyB64` | `""` |
 | `agent.minion.allowSelfGeneratedKey` | Allow the keygen Job in in-cluster mode when `keySecretName`, `privateKeyB64`, and `publicKeyB64` are empty | `false` |
@@ -210,49 +195,15 @@ See [values.yaml](values.yaml) for the complete list of configuration options.
 | `agent.replicas` | Number of minion pod replicas | `1` |
 | `agent.logLevel` | Minion log level | `info` |
 | `agent.minion.id` | Minion ID (uses pod hostname if empty) | `""` |
-| `agent.persistence.enabled` | Persist PKI across restarts | `false` |
-| `agent.persistence.type` | `pvc` or `hostPath` | `pvc` |
-| `agent.persistence.size` | PVC size (if enabled) | `1Gi` |
 | `agent.vault.addr` | Vault server address (enables saltext.vault) | `""` |
 | `rbac.create` | Create RBAC resources | `true` |
 | `rbac.fullAccess` | Grant full cluster admin rights | `true` |
 | `serviceAccount.name` | ServiceAccount name | `salt-minion` |
 
-### Persistence
+### Key storage
 
-#### PVC (Recommended for Production)
-
-Requires a StorageClass:
-
-```bash
-helm install salt-minion ./helm/salt-minion \
-  --set agent.minion.allowSelfGeneratedKey=true \
-  --set agent.persistence.enabled=true \
-  --set agent.persistence.type=pvc \
-  --set agent.persistence.size=1Gi
-```
-
-Or use an existing PVC:
-
-```bash
-helm install salt-minion ./helm/salt-minion \
-  --set agent.minion.allowSelfGeneratedKey=true \
-  --set agent.persistence.enabled=true \
-  --set agent.persistence.pvc.existingClaim=my-pvc
-```
-
-#### HostPath (Development Only)
-
-For clusters without dynamic provisioning:
-
-```bash
-helm install salt-minion ./helm/salt-minion \
-  --set agent.minion.allowSelfGeneratedKey=true \
-  --set agent.persistence.enabled=true \
-  --set agent.persistence.type=hostPath \
-  --set agent.persistence.hostPath.path=/var/lib/salt-minion/pki \
-  --set agent.nodeSelector.'kubernetes\.io/hostname'=worker-1
-```
+The minion Pod uses an `emptyDir` for its working PKI directory. The init
+container copies the keys from the Secret when the Pod starts.
 
 ### Vault Integration
 
@@ -277,6 +228,8 @@ credentials:
 ### Key Management
 
 The key preparation init container and minion use the same image and container security context. The pod `fsGroup` gives them access to the Secret and PKI volume. Secrets must provide `minion.pem` and `minion.pub` files containing PEM text. Set `agent.minion.privateKeyB64` and `agent.minion.publicKeyB64` together to create this Secret from base64-encoded PEM values.
+
+When inline keys are supplied, Helm creates the Secret using `keySecretName` if set. Installation fails if an unmanaged Secret with that name already exists. To use an existing Secret, set `keySecretName` without inline keys.
 
 #### Pre-Seeded Keys
 

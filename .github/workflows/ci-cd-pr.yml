@@ -28,13 +28,32 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
-          version: 'v3.12.0'
+          version: 'v3.19.5'
 
-      - name: Helm Dependency Update & Lint
+      - name: Set up Helm unittest and dependencies
         run: |
+          echo "📦 Installing Helm unittest plugin..."
+          if ! helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.2.1 > "$RUNNER_TEMP/helm-unittest-install.log" 2>&1; then
+            cat "$RUNNER_TEMP/helm-unittest-install.log"
+            exit 1
+          fi
+
           echo "📦 Building master chart dependencies..."
           helm dependency update helm/salt-master --debug
 
+      - name: Helm unit tests
+        run: |
+          echo "🧪 Testing salt-key-operator chart..."
+          helm unittest helm/salt-key-operator
+
+          echo "🧪 Testing salt-master chart..."
+          helm unittest --with-subchart=false helm/salt-master
+
+          echo "🧪 Testing salt-minion chart..."
+          helm unittest helm/salt-minion
+
+      - name: Helm lint
+        run: |
           echo "📊 Linting salt-key-operator chart..."
           helm lint helm/salt-key-operator --debug
 
