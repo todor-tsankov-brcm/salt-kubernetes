@@ -1,0 +1,82 @@
+suite: minion deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: prepares keys with a group-readable source
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 10001
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.defaultMode
+          value: 288  # 0440: owner and group read access
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.secretName
+          value: RELEASE-NAME-keys
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].volumeMounts[?(@.name == "minion-pki")].mountPath
+          value: /pki
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "salt-minion")].volumeMounts[?(@.name == "minion-pki")]
+          value:
+            name: minion-pki
+            mountPath: /etc/salt/pki/minion
+            subPath: minion
+
+  - it: shares the configured security context with key preparation
+    set:
+      agent.minion.keySecretName: existing-keys
+      agent.podSecurityContext.fsGroup: 2000
+      agent.containerSecurityContext.runAsUser: 2000
+      agent.containerSecurityContext.runAsGroup: 2000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].securityContext
+          value:
+            runAsUser: 2000
+            runAsGroup: 2000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "salt-minion")].securityContext
+          value:
+            runAsUser: 2000
+            runAsGroup: 2000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+
+  - it: uses the requested existing Secret
+    set:
+      agent.minion.keySecretName: existing-keys
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "minion-keys-source")].secret.secretName
+          value: existing-keys
+
+  - it: renders external mode without requiring keys
+    set:
+      agent.authMode: external
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: rejects missing keys when generation is disabled
+    set:
+      agent.minion.allowSelfGeneratedKey: false
+    asserts:
+      - failedTemplate:
+          errorMessage: set agent.minion.keySecretName or both agent.minion.privateKeyB64 and agent.minion.publicKeyB64, or enable agent.minion.allowSelfGeneratedKey
+
+  - it: requires a key source by default
+    asserts:
+      - failedTemplate:
+          errorMessage: set agent.minion.keySecretName or both agent.minion.privateKeyB64 and agent.minion.publicKeyB64, or enable agent.minion.allowSelfGeneratedKey

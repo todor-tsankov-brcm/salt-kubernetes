@@ -1,6 +1,5 @@
-{{- $secretName := .Values.agent.minion.keySecretName | default (printf "%s-keys" .Release.Name) -}}
-{{- $existingSecret := lookup "v1" "Secret" .Values.namespace $secretName -}}
-{{- if and (not .Values.agent.minion.keySecretName) (not $existingSecret) }}
+{{- if include "salt-minion.keygenJobEnabled" . }}
+{{- $secretName := include "salt-minion.keySecretName" . }}
 apiVersion: batch/v1
 kind: Job
 metadata:

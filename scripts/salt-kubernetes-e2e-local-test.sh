@@ -103,7 +103,7 @@ echo "===================================================="
 
 helm lint ./helm/salt-key-operator
 helm lint ./helm/salt-master
-helm lint ./helm/salt-minion
+helm lint ./helm/salt-minion --set agent.minion.allowSelfGeneratedKey=true
 
 git diff --check
 

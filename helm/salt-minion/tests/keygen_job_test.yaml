@@ -1,0 +1,59 @@
+suite: keygen Job
+templates:
+  - templates/keygen-job.yaml
+release:
+  name: custom-release
+  namespace: custom-namespace
+set:
+  namespace: custom-namespace
+  serviceAccount.name: custom-minion
+tests:
+  - it: creates the Job when key generation is enabled
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+      - equal:
+          path: metadata.name
+          value: custom-release-keygen
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: custom-minion
+
+  - it: does not create the Job when a Secret name is supplied
+    set:
+      agent.minion.keySecretName: existing-keys
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the Job for keys supplied through Helm values
+    set:
+      agent.minion.privateKeyB64: cHJpdmF0ZQ==
+      agent.minion.publicKeyB64: cHVibGlj
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the Job in external mode
+    set:
+      agent.authMode: external
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the Job when generation is disabled
+    set:
+      agent.minion.allowSelfGeneratedKey: false
+    asserts:
+      - hasDocuments:
+          count: 0

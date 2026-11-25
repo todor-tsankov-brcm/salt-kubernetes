@@ -10,6 +10,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 # Pinned rather than "latest" so a given salt-minion-kubernetes-image release
 # tag reproducibly carries one specific Salt version - see CHANGELOG.md.
 ARG SALT_VERSION=3008.2
+ARG SALT_UID=10001
+ARG SALT_GID=10001
+ARG SALT_HOME=/opt/saltstack/salt
+ARG SALT_SHELL=/usr/sbin/nologin
 
 # Bundles kubectl directly into the image so the salt-minion-kubernetes chart
 # can skip its install-kubectl init container (agent.kubectl.bundled: true).
@@ -53,6 +57,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl gnupg tini iproute2 dnsutils netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
+# Create the runtime identity before Salt assigns file ownership.
+RUN groupadd --system --gid "${SALT_GID}" salt \
+    && useradd --system --uid "${SALT_UID}" --gid "${SALT_GID}" \
+        --no-create-home --home-dir "${SALT_HOME}" \
+        --shell "${SALT_SHELL}" --comment Salt salt
+
 # Install Salt minion using the official onedir bootstrap script (pinned version)
 RUN set -eu; \
     curl -fsSL -o /tmp/bootstrap-salt.sh \
@@ -67,9 +77,6 @@ RUN set -eu; \
         sh /tmp/bootstrap-salt.sh -X -P onedir "$SALT_VERSION"; \
     fi; \
     rm -f /tmp/bootstrap-salt.sh /tmp/bootstrap-salt.sh.sha256 /tmp/bootstrap-salt.sh.sha256.check
-
-# Ensure non‑root salt user exists
-RUN id salt >/dev/null 2>&1 || useradd --system --uid 999 --no-create-home --shell /usr/sbin/nologin salt
 
 # Copy the requirements file into the image
 COPY salt-extensions.txt /tmp/salt-extensions.txt
@@ -108,9 +115,8 @@ RUN if [ "$INCLUDE_KUBECTL" = "true" ]; then \
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Non-root: run as the 'salt' system user/group salt-common's own postinst
-# already created (rather than inventing a separate one), and own
-# everything the minion writes to at runtime. This image only calls the
+# Non-root: the 'salt' system user owns the directories the minion writes
+# to at runtime. This image only calls the
 # Kubernetes API via its mounted ServiceAccount token, so it never needs
 # root inside the container.
 RUN chmod 0755 /usr/local/bin/entrypoint.sh \
@@ -139,11 +145,9 @@ ENV SALT_MASTER="" \
 
 # Numeric, not the name: Kubernetes' runAsNonRoot check can't resolve a
 # named USER without executing code inside the image, and refuses to start
-# the container at all ("cannot verify user is non-root") if it can't. 999
-# is what salt-common's own postinst allocates the 'salt' user/group in
-# this build (verify with `id salt` if the base image or install order
-# ever changes).
-USER 999:999
+# the container at all ("cannot verify user is non-root") if it can't.
+# The salt user and group are created with this ID above.
+USER ${SALT_UID}:${SALT_GID}
 
 VOLUME ["/etc/salt/pki/minion"]
 

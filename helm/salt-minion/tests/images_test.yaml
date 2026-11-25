@@ -2,12 +2,18 @@ suite: workload images
 templates:
   - templates/deployment.yaml
   - templates/keygen-job.yaml
+set:
+  agent.minion.allowSelfGeneratedKey: true
 tests:
   - it: renders the default images
     asserts:
       - template: templates/deployment.yaml
         equal:
           path: spec.template.spec.containers[?(@.name == "salt-minion")].image
+          value: ghcr.io/saltstack/salt-kubernetes/salt-minion:0.1.0
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.initContainers[?(@.name == "prepare-minion-keys")].image
           value: ghcr.io/saltstack/salt-kubernetes/salt-minion:0.1.0
       - template: templates/keygen-job.yaml
         equal:

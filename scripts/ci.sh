@@ -83,7 +83,7 @@ fi
 #------------------------------------------------------------
 echo "--- Helm lint"
 helm lint helm/salt-master --set agent.masterKeySecretName=my-master-key
-helm lint helm/salt-minion --set agent.podSecurityContext.runAsNonRoot=true
+helm lint helm/salt-minion --set agent.minion.allowSelfGeneratedKey=true
 helm lint helm/salt-key-operator
 # Ensure chart dependencies are up to date
 echo "--- Updating Helm dependencies for master chart"

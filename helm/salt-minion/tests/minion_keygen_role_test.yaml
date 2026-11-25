@@ -1,0 +1,70 @@
+suite: keygen Role
+templates:
+  - templates/minion-keygen-role.yaml
+release:
+  name: custom-release
+  namespace: custom-namespace
+set:
+  namespace: custom-namespace
+  serviceAccount.name: custom-minion
+tests:
+  - it: creates the Role when key generation is enabled
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+      - equal:
+          path: metadata.name
+          value: custom-release-minion-keygen-role
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: [secrets]
+              verbs: [create, get, list]
+
+  - it: does not create the Role when a Secret name is supplied
+    set:
+      agent.minion.keySecretName: existing-keys
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the Role for keys supplied through Helm values
+    set:
+      agent.minion.privateKeyB64: cHJpdmF0ZQ==
+      agent.minion.publicKeyB64: cHVibGlj
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the Role in external mode
+    set:
+      agent.authMode: external
+      agent.minion.allowSelfGeneratedKey: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the Role when generation is disabled
+    set:
+      agent.minion.allowSelfGeneratedKey: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the Role when RBAC is managed externally
+    set:
+      agent.minion.allowSelfGeneratedKey: true
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -6,6 +6,10 @@ FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SALT_VERSION=3008.2
+ARG SALT_UID=10001
+ARG SALT_GID=10001
+ARG SALT_HOME=/opt/saltstack/salt
+ARG SALT_SHELL=/usr/sbin/nologin
 
 ARG INCLUDE_KUBECTL=true
 ARG KUBECTL_VERSION=v1.30.2
@@ -44,6 +48,12 @@ RUN apt-get update \
         netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
+# Create the runtime identity before Salt assigns file ownership.
+RUN groupadd --system --gid "${SALT_GID}" salt \
+    && useradd --system --uid "${SALT_UID}" --gid "${SALT_GID}" \
+        --no-create-home --home-dir "${SALT_HOME}" \
+        --shell "${SALT_SHELL}" --comment Salt salt
+
 # Install Salt through the official bootstrap script.
 # build_ca is optional and is used only while downloading build dependencies.
 RUN --mount=type=secret,id=build_ca,target=/tmp/build-ca.crt,required=false \
@@ -73,19 +83,6 @@ RUN --mount=type=secret,id=build_ca,target=/tmp/build-ca.crt,required=false \
     if [ -s /tmp/build-ca.crt ]; then \
         rm -f /usr/local/share/ca-certificates/build-ca.crt; \
         update-ca-certificates >/dev/null; \
-    fi
-
-# Use a deterministic non-root identity.
-RUN set -eux; \
-    if id salt >/dev/null 2>&1; then \
-        groupmod --gid 10001 salt; \
-        usermod --uid 10001 --gid 10001 salt; \
-    else \
-        groupadd --system --gid 10001 salt; \
-        useradd --system --uid 10001 --gid 10001 \
-            --no-create-home \
-            --shell /usr/sbin/nologin \
-            salt; \
     fi
 
 COPY salt-extensions.txt /tmp/salt-extensions.txt
@@ -158,7 +155,7 @@ RUN chmod 0755 /usr/local/bin/entrypoint.sh \
         /etc/salt/pillar \
         /var/cache/salt/minion \
         /var/log/salt \
-    && chown -R 10001:10001 \
+    && chown -R "${SALT_UID}:${SALT_GID}" \
         /etc/salt \
         /var/cache/salt \
         /var/log/salt
@@ -180,7 +177,7 @@ ENV SALT_MASTER="" \
     VAULT_TOKEN_FILE="" \
     VAULT_SDB_PROFILE="vault_sdb"
 
-USER 10001:10001
+USER ${SALT_UID}:${SALT_GID}
 
 VOLUME ["/etc/salt/pki/minion"]
 
